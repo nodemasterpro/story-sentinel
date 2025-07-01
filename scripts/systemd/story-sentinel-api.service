@@ -1,0 +1,53 @@
+[Unit]
+Description=Story Sentinel Health API
+Documentation=https://github.com/yourusername/story-sentinel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=story-sentinel
+Group=story-sentinel
+WorkingDirectory=/opt/story-sentinel
+
+# Environment
+Environment="PATH=/opt/story-sentinel/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="PYTHONPATH=/opt/story-sentinel"
+EnvironmentFile=-/etc/story-sentinel/.env
+
+# API process
+ExecStart=/opt/story-sentinel/venv/bin/python -m sentinel.api
+
+# Restart policy
+Restart=on-failure
+RestartSec=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=story-sentinel-api
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+
+# Allow writing to specific paths
+ReadWritePaths=/var/log/story-sentinel /etc/story-sentinel
+
+# Network access for API
+PrivateNetwork=false
+
+[Install]
+WantedBy=multi-user.target

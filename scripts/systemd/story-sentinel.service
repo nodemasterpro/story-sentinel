@@ -1,0 +1,56 @@
+[Unit]
+Description=Story Sentinel - Automated monitoring and upgrade system
+Documentation=https://github.com/yourusername/story-sentinel
+After=network-online.target story.service story-geth.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=story-sentinel
+Group=story-sentinel
+WorkingDirectory=/opt/story-sentinel
+
+# Environment
+Environment="PATH=/opt/story-sentinel/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="PYTHONPATH=/opt/story-sentinel"
+EnvironmentFile=-/etc/story-sentinel/.env
+
+# Main process
+ExecStart=/opt/story-sentinel/venv/bin/story-sentinel monitor
+
+# Restart policy
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=3
+StartLimitInterval=60
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=story-sentinel
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+
+# Allow writing to specific paths
+ReadWritePaths=/var/log/story-sentinel /var/lib/story-sentinel /etc/story-sentinel
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=512
+
+[Install]
+WantedBy=multi-user.target

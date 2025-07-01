@@ -1,0 +1,46 @@
+# Story Sentinel Configuration Example
+# Copy this file to config.yaml and adjust the settings
+
+# Story consensus configuration
+story:
+  binary_path: /usr/local/bin/story
+  service_name: story
+  rpc_port: 26657
+  github_repo: piplabs/story
+
+# Story Geth configuration  
+story_geth:
+  binary_path: /usr/local/bin/story-geth
+  service_name: story-geth
+  rpc_port: 8545
+  github_repo: piplabs/story-geth
+
+# Health check thresholds
+thresholds:
+  # Maximum block height gap before considered unhealthy
+  height_gap: 20
+  
+  # Minimum number of peers required
+  min_peers: 5
+  
+  # Maximum variance in block time (seconds)
+  block_time_variance: 10
+  
+  # Memory limit before warning (GB)
+  memory_limit_gb: 8.0
+  
+  # Minimum disk space required (GB)
+  disk_space_min_gb: 10.0
+
+# Notification settings (configured in .env file)
+# notifications:
+#   discord_webhook: https://discord.com/api/webhooks/...
+#   telegram_bot_token: 123456:ABC-DEF...
+#   telegram_chat_id: -1001234567890
+
+# Advanced settings (usually configured via environment variables)
+# mode: manual  # auto or manual
+# log_level: INFO
+# backup_retention_days: 30
+# max_upgrade_duration: 600
+# check_interval: 300
