@@ -265,9 +265,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/story-sentinel/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/story-sentinel/discussions)
-- **Security**: security@yourdomain.com
+- **Issues**: [GitHub Issues](https://github.com/nodemasterpro/story-sentinel/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/nodemasterpro/story-sentinel/discussions)
+- **Security**: security@nodesforall.com
 
 ---
 
