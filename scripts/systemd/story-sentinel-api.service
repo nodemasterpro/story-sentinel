@@ -15,8 +15,14 @@ Environment="PATH=/opt/story-sentinel/venv/bin:/usr/local/sbin:/usr/local/bin:/u
 Environment="PYTHONPATH=/opt/story-sentinel"
 EnvironmentFile=-/etc/story-sentinel/.env
 
-# API process
-ExecStart=/opt/story-sentinel/venv/bin/python -m sentinel.api
+# API process  
+ExecStart=/opt/story-sentinel/venv/bin/python -c "
+import os
+os.environ['CONFIG_PATH'] = '/etc/story-sentinel/config.yaml'
+os.environ['ENV_PATH'] = '/etc/story-sentinel/.env'
+from sentinel.api import main
+main()
+"
 
 # Restart policy
 Restart=on-failure

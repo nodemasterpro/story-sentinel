@@ -16,7 +16,7 @@ Environment="PYTHONPATH=/opt/story-sentinel"
 EnvironmentFile=-/etc/story-sentinel/.env
 
 # Main process
-ExecStart=/opt/story-sentinel/venv/bin/story-sentinel monitor
+ExecStart=/opt/story-sentinel/venv/bin/story-sentinel --config /etc/story-sentinel/config.yaml monitor
 
 # Restart policy
 Restart=on-failure

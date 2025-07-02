@@ -267,11 +267,18 @@ def main():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
-    # Load config
-    config = Config()
+    # Load config from environment if set
+    import os
+    from pathlib import Path
+    config_path = os.getenv('CONFIG_PATH')
+    env_path = os.getenv('ENV_PATH')
+    
+    config = Config(
+        config_path=Path(config_path) if config_path else None,
+        env_path=Path(env_path) if env_path else None
+    )
     
     # Get host and port from environment
-    import os
     host = os.getenv('API_HOST', '0.0.0.0')
     port = int(os.getenv('API_PORT', '8080'))
     
