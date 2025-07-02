@@ -311,8 +311,68 @@ EOF
     fi
     
     # Create .env template
+    if [[ ! -f "$CONFIG_DIR/.env.example" ]]; then
+        cat > "$CONFIG_DIR/.env.example" <<'EOF'
+# Story Sentinel Environment Configuration
+# Copy this file to .env and fill in your values
+
+# Discord notifications (optional)
+# Get webhook URL from Discord server settings -> Integrations -> Webhooks
+DISCORD_WEBHOOK=https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN
+
+# Telegram notifications (optional)  
+# Create bot via @BotFather and get token
+TG_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+# Get chat ID by messaging the bot and checking: https://api.telegram.org/bot<TOKEN>/getUpdates
+TG_CHAT_ID=-1001234567890
+
+# Operation mode
+# - manual: Requires manual approval for all upgrades
+# - auto: Automatically approves and executes safe upgrades (patch versions only)
+MODE=manual
+
+# Logging configuration
+# Levels: DEBUG, INFO, WARNING, ERROR
+LOG_LEVEL=INFO
+
+# Backup settings
+# How many days to keep old backups
+BACKUP_RETENTION_DAYS=30
+
+# Maximum time allowed for an upgrade (seconds)
+MAX_UPGRADE_DURATION=600
+
+# How often to check for updates (seconds)
+CHECK_INTERVAL=300
+
+# Story installation paths (defaults should work for standard installations)
+# STORY_BINARY_PATH=/usr/local/bin/story
+# STORY_GETH_BINARY_PATH=/usr/local/bin/story-geth
+
+# Story home directory (where data and configs are stored)
+# STORY_HOME=/home/story/.story
+
+# Backup directory
+# BACKUP_DIR=/var/lib/story-sentinel/backups
+
+# Log directory  
+# LOG_DIR=/var/log/story-sentinel
+
+# GitHub API token (optional, helps with rate limits)
+# Generate at: https://github.com/settings/tokens
+# GITHUB_TOKEN=ghp_YOUR_GITHUB_PERSONAL_ACCESS_TOKEN
+
+# Prometheus metrics (for monitoring endpoints)
+# PROMETHEUS_PORT=9090
+# PROMETHEUS_ENABLED=true
+
+# Health check API settings
+# API_HOST=0.0.0.0
+# API_PORT=8080
+EOF
+    fi
+    
     if [[ ! -f "$CONFIG_DIR/.env" ]]; then
-        cp "$HOME/.story-sentinel/.env.example" "$CONFIG_DIR/.env.example" 2>/dev/null || true
         touch "$CONFIG_DIR/.env"
         chmod 600 "$CONFIG_DIR/.env"
     fi

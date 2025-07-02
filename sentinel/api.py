@@ -45,6 +45,7 @@ class HealthAPI:
         self.app.router.add_get('/status', self.status_handler)
         self.app.router.add_get('/schedule', self.schedule_handler)
         self.app.router.add_get('/version', self.version_handler)
+        self.app.router.add_get('/next-upgrade.ics', self.calendar_handler)
         
     async def health_handler(self, request):
         """Health check endpoint."""
@@ -222,6 +223,29 @@ class HealthAPI:
             'version': __version__,
             'api_version': '1.0.0'
         })
+        
+    async def calendar_handler(self, request):
+        """Serve ICS calendar file."""
+        try:
+            if self.scheduler.calendar_file.exists():
+                with open(self.scheduler.calendar_file, 'rb') as f:
+                    calendar_data = f.read()
+                    
+                return web.Response(
+                    body=calendar_data,
+                    content_type='text/calendar',
+                    headers={
+                        'Content-Disposition': 'attachment; filename="story-sentinel-upgrades.ics"'
+                    }
+                )
+            else:
+                return web.json_response(
+                    {'error': 'No upgrade calendar available'},
+                    status=404
+                )
+        except Exception as e:
+            logger.error(f"Calendar serve error: {e}")
+            return web.json_response({'error': str(e)}, status=500)
         
     async def start(self):
         """Start the API server."""

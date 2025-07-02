@@ -298,10 +298,15 @@ def init(config: Config):
     """Initialize Story Sentinel configuration."""
     click.echo("Initializing Story Sentinel...")
     
-    # Create directories
-    config.config_path.parent.mkdir(parents=True, exist_ok=True)
-    config.backup_dir.mkdir(parents=True, exist_ok=True)
-    config.log_dir.mkdir(parents=True, exist_ok=True)
+    # Create directories with proper permissions
+    import os
+    try:
+        config.config_path.parent.mkdir(parents=True, exist_ok=True)
+        config.backup_dir.mkdir(parents=True, exist_ok=True)
+        config.log_dir.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        # During installation, directories are created by root
+        click.echo("Note: Some directories may need to be created by the installer")
     
     # Save default config
     config.save_yaml_config()

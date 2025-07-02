@@ -125,6 +125,9 @@ story-sentinel monitor
 ### Monitoring Endpoints
 
 - **Health Check**: `http://localhost:8080/health`
+- **Node Status**: `http://localhost:8080/status`
+- **Upgrade Schedule**: `http://localhost:8080/schedule`
+- **Calendar (ICS)**: `http://localhost:8080/next-upgrade.ics`
 - **Prometheus Metrics**: `http://localhost:8080/metrics`
 
 ## Upgrade Process
@@ -184,7 +187,19 @@ story-sentinel monitor
    sudo /opt/story-sentinel/scripts/runner.sh rollback story /path/to/backup
    ```
 
-3. **Permission issues**:
+3. **Calendar integration**:
+   ```bash
+   # Download calendar file for external apps
+   curl http://localhost:8080/next-upgrade.ics -o story-upgrades.ics
+   
+   # Or serve via Nginx for team access
+   # Add to nginx config:
+   # location /story-calendar.ics {
+   #     proxy_pass http://localhost:8080/next-upgrade.ics;
+   # }
+   ```
+
+4. **Permission issues**:
    ```bash
    # Fix permissions
    sudo chown -R story-sentinel:story-sentinel /opt/story-sentinel
