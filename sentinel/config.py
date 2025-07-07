@@ -198,26 +198,70 @@ class Config:
     def get_current_versions(self) -> Dict[str, str]:
         """Get current installed versions of Story components."""
         versions = {}
+        docker_mode = os.getenv('DOCKER_MODE')
         
         # Get Story version
         try:
-            result = os.popen(f"{self.story.binary_path} version 2>/dev/null").read().strip()
-            self.story.current_version = result
-            versions['story'] = result
-        except:
+            if docker_mode:
+                # In Docker mode, try to get version from RPC
+                import requests
+                response = requests.get(f"{self.story_rpc_endpoint}/status", timeout=5)
+                data = response.json()
+                if 'result' in data and 'node_info' in data['result']:
+                    version = data['result']['node_info'].get('version', 'unknown')
+                    # Clean up version string (remove commit info if present)
+                    if '-' in version:
+                        version = version.split('-')[0]
+                    self.story.current_version = version
+                    versions['story'] = version
+                else:
+                    versions['story'] = "unknown"
+            else:
+                result = os.popen(f"{self.story.binary_path} version 2>/dev/null").read().strip()
+                self.story.current_version = result
+                versions['story'] = result
+        except Exception as e:
+            logger.error(f"Failed to get Story version: {e}")
             versions['story'] = "unknown"
             
         # Get Story-Geth version
         try:
-            result = os.popen(f"{self.story_geth.binary_path} version 2>/dev/null").read().strip()
-            # Parse geth version output
-            if "Version:" in result:
-                version_line = [l for l in result.split('\n') if 'Version:' in l][0]
-                self.story_geth.current_version = version_line.split('Version:')[1].strip()
+            if docker_mode:
+                # In Docker mode, try to get version from RPC
+                import requests
+                response = requests.post(
+                    self.story_geth_rpc_endpoint,
+                    json={"jsonrpc": "2.0", "method": "web3_clientVersion", "params": [], "id": 1},
+                    timeout=5
+                )
+                data = response.json()
+                if 'result' in data:
+                    # Extract version from client string like "Geth/v1.1.1-stable/..."
+                    client_version = data['result']
+                    if '/' in client_version and len(client_version.split('/')) > 1:
+                        version = client_version.split('/')[1]
+                        # Clean up version string (remove -stable suffix and extra info)
+                        if '-' in version:
+                            version = version.split('-')[0]
+                        if version.startswith('v'):
+                            version = version[1:]  # Remove 'v' prefix
+                        self.story_geth.current_version = version
+                        versions['story_geth'] = version
+                    else:
+                        versions['story_geth'] = client_version
+                else:
+                    versions['story_geth'] = "unknown"
             else:
-                self.story_geth.current_version = result
-            versions['story_geth'] = self.story_geth.current_version
-        except:
+                result = os.popen(f"{self.story_geth.binary_path} version 2>/dev/null").read().strip()
+                # Parse geth version output
+                if "Version:" in result:
+                    version_line = [l for l in result.split('\n') if 'Version:' in l][0]
+                    self.story_geth.current_version = version_line.split('Version:')[1].strip()
+                else:
+                    self.story_geth.current_version = result
+                versions['story_geth'] = self.story_geth.current_version
+        except Exception as e:
+            logger.error(f"Failed to get Story-Geth version: {e}")
             versions['story_geth'] = "unknown"
             
         return versions
