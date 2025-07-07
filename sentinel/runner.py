@@ -18,6 +18,9 @@ from .watcher import Version
 
 logger = logging.getLogger(__name__)
 
+# Path to the upgrade runner script
+UPGRADE_SCRIPT = "/opt/story-sentinel/scripts/upgrade-runner.sh"
+
 class UpgradeRunner:
     """Executes upgrades for Story Protocol nodes."""
     
@@ -48,7 +51,7 @@ class UpgradeRunner:
             
     def perform_upgrade(self, component: str, target_version: Version, 
                        dry_run: bool = False) -> Tuple[bool, str]:
-        """Perform upgrade for specified component."""
+        """Perform upgrade for specified component using native system upgrade."""
         upgrade_record = {
             'component': component,
             'from_version': self.config.get_current_versions().get(component, 'unknown'),
@@ -66,15 +69,116 @@ class UpgradeRunner:
             if not self._pre_upgrade_checks(component):
                 raise Exception("Pre-upgrade checks failed")
                 
-            # Create backup
-            backup_path = self._create_backup(component)
-            upgrade_record['backup_path'] = str(backup_path)
-            
             if dry_run:
                 logger.info("Dry run mode - skipping actual upgrade")
                 upgrade_record['success'] = True
                 return True, "Dry run completed successfully"
+            
                 
+            # Use external upgrade script for native installation
+            if os.path.exists(UPGRADE_SCRIPT):
+                success, message = self._run_native_upgrade(component, target_version.version)
+                if success:
+                    upgrade_record['success'] = True
+                    upgrade_record['end_time'] = datetime.now().isoformat()
+                    logger.info(f"Successfully upgraded {component} to {target_version.version}")
+                    return True, f"Successfully upgraded {component} to {target_version.version}"
+                else:
+                    raise Exception(message)
+            else:
+                # Fallback to built-in upgrade process (legacy)
+                return self._perform_legacy_upgrade(component, target_version, upgrade_record)
+                
+        except Exception as e:
+            upgrade_record['success'] = False
+            upgrade_record['error'] = str(e)
+            upgrade_record['end_time'] = datetime.now().isoformat()
+            
+            logger.error(f"Upgrade failed: {e}")
+            return False, f"Upgrade failed: {e}"
+            
+        finally:
+            # Save upgrade record
+            self.upgrade_history.append(upgrade_record)
+            self._save_upgrade_history()
+            
+    def _run_native_upgrade(self, component: str, version: str) -> Tuple[bool, str]:
+        """Run upgrade using the native upgrade script."""
+        try:
+            # Set environment variables for the script
+            env = os.environ.copy()
+            env.update({
+                'STORY_BINARY': self.config.story.binary_path,
+                'STORY_GETH_BINARY': self.config.story_geth.binary_path,
+                'STORY_SERVICE': self.config.story.service_name,
+                'STORY_GETH_SERVICE': self.config.story_geth.service_name,
+            })
+            
+            # Run the upgrade script
+            logger.info(f"Executing native upgrade: {UPGRADE_SCRIPT} upgrade {component} {version}")
+            result = subprocess.run(
+                [UPGRADE_SCRIPT, 'upgrade', component, version],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=1800  # 30 minutes timeout
+            )
+            
+            if result.returncode == 0:
+                logger.info(f"Native upgrade completed successfully: {result.stdout}")
+                return True, "Upgrade completed successfully"
+            else:
+                logger.error(f"Native upgrade failed: {result.stderr}")
+                return False, result.stderr or "Upgrade script failed"
+                
+        except subprocess.TimeoutExpired:
+            logger.error("Upgrade script timed out")
+            return False, "Upgrade timed out after 30 minutes"
+        except Exception as e:
+            logger.error(f"Failed to execute upgrade script: {e}")
+            return False, f"Failed to execute upgrade script: {e}"
+            
+    def _pre_upgrade_checks(self, component: str) -> bool:
+        """Perform pre-upgrade health checks."""
+        logger.info(f"Running pre-upgrade checks for {component}")
+        
+        # Check system resources
+        health_status = self.health_checker.check_all()
+        system_health = health_status.get('system')
+        
+        if not system_health or not system_health.healthy:
+            logger.error("System health check failed")
+            return False
+            
+        # Check disk space
+        if system_health.checks['disk_free_gb'] < 5.0:
+            logger.error(f"Insufficient disk space: {system_health.checks['disk_free_gb']:.1f}GB")
+            return False
+            
+        # Check if node is synced
+        if component == 'story':
+            story_health = health_status.get('story')
+            if story_health and story_health.checks.get('catching_up', True):
+                logger.warning("Story node is still syncing")
+                # Allow upgrade anyway, but warn
+                
+        elif component == 'story_geth':
+            geth_health = health_status.get('story_geth')
+            if geth_health and geth_health.checks.get('syncing', True):
+                logger.warning("Story Geth is still syncing")
+                # Allow upgrade anyway, but warn
+                
+        return True
+        
+    def _perform_legacy_upgrade(self, component: str, target_version: Version, upgrade_record: dict) -> Tuple[bool, str]:
+        """Legacy upgrade method for backward compatibility."""
+        logger.warning("Using legacy upgrade method - consider using native installation for better reliability")
+        
+        try:
+            # Create backup
+            backup_path = self._create_backup(component)
+            upgrade_record['backup_path'] = str(backup_path)
+            
             # Download new binary
             binary_path = self._download_binary(component, target_version)
             if not binary_path:
@@ -109,53 +213,10 @@ class UpgradeRunner:
             upgrade_record['success'] = True
             upgrade_record['end_time'] = datetime.now().isoformat()
             
-            logger.info(f"Successfully upgraded {component} to {target_version.version}")
             return True, f"Successfully upgraded {component} to {target_version.version}"
             
         except Exception as e:
-            upgrade_record['success'] = False
-            upgrade_record['error'] = str(e)
-            upgrade_record['end_time'] = datetime.now().isoformat()
-            
-            logger.error(f"Upgrade failed: {e}")
-            return False, f"Upgrade failed: {e}"
-            
-        finally:
-            # Save upgrade record
-            self.upgrade_history.append(upgrade_record)
-            self._save_upgrade_history()
-            
-    def _pre_upgrade_checks(self, component: str) -> bool:
-        """Perform pre-upgrade health checks."""
-        logger.info(f"Running pre-upgrade checks for {component}")
-        
-        # Check system resources
-        health_status = self.health_checker.check_all()
-        system_health = health_status.get('system')
-        
-        if not system_health or not system_health.healthy:
-            logger.error("System health check failed")
-            return False
-            
-        # Check disk space
-        if system_health.checks['disk_free_gb'] < 5.0:
-            logger.error(f"Insufficient disk space: {system_health.checks['disk_free_gb']:.1f}GB")
-            return False
-            
-        # Check if node is synced
-        if component == 'story':
-            story_health = health_status.get('story')
-            if story_health and story_health.checks.get('catching_up', True):
-                logger.warning("Story node is still syncing")
-                # Allow upgrade anyway, but warn
-                
-        elif component == 'story_geth':
-            geth_health = health_status.get('story_geth')
-            if geth_health and geth_health.checks.get('syncing', True):
-                logger.warning("Story Geth is still syncing")
-                # Allow upgrade anyway, but warn
-                
-        return True
+            return False, str(e)
         
     def _create_backup(self, component: str) -> Path:
         """Create backup of current binary and configuration."""

@@ -53,16 +53,16 @@ class Config:
         
         # Initialize configurations with environment priority
         self.story: ServiceConfig = ServiceConfig(
-            binary_path=os.getenv("SENTINEL_STORY_BINARY", os.getenv("STORY_BINARY_PATH", "/usr/local/bin/story")),
-            service_name=os.getenv("SENTINEL_STORY_SERVICE", "story"),
-            rpc_port=int(os.getenv("SENTINEL_STORY_RPC_PORT", "26657")),
+            binary_path=os.getenv("STORY_BINARY_PATH", "/usr/local/bin/story"),
+            service_name=os.getenv("STORY_SERVICE_NAME", "story"),
+            rpc_port=int(os.getenv("STORY_RPC_PORT", "26657")),
             github_repo="piplabs/story"
         )
         
         self.story_geth: ServiceConfig = ServiceConfig(
-            binary_path=os.getenv("SENTINEL_GETH_BINARY", os.getenv("STORY_GETH_BINARY_PATH", "/usr/local/bin/story-geth")),
-            service_name=os.getenv("SENTINEL_GETH_SERVICE", "story-geth"),
-            rpc_port=int(os.getenv("SENTINEL_GETH_RPC_PORT", "8545")),
+            binary_path=os.getenv("STORY_GETH_BINARY_PATH", "/usr/local/bin/story-geth"),
+            service_name=os.getenv("STORY_GETH_SERVICE_NAME", "story-geth"),
+            rpc_port=int(os.getenv("STORY_GETH_RPC_PORT", "8545")),
             version_command="version",
             github_repo="piplabs/story-geth"
         )
@@ -82,25 +82,25 @@ class Config:
         
         # General settings with environment priority
         self.mode = os.getenv("MODE", "manual")  # auto|manual
-        self.log_level = os.getenv("SENTINEL_LOG_LEVEL", os.getenv("LOG_LEVEL", "INFO"))
+        self.log_level = os.getenv("LOG_LEVEL", "INFO")
         self.backup_retention_days = int(os.getenv("BACKUP_RETENTION_DAYS", "30"))
         self.max_upgrade_duration = int(os.getenv("MAX_UPGRADE_DURATION", "600"))
-        self.check_interval = int(os.getenv("SENTINEL_CHECK_INTERVAL", os.getenv("CHECK_INTERVAL", "300")))
-        self.update_check_interval = int(os.getenv("SENTINEL_UPDATE_CHECK_INTERVAL", "3600"))
-        self.api_host = os.getenv("SENTINEL_API_HOST", "0.0.0.0")
-        self.api_port = int(os.getenv("SENTINEL_API_PORT", "8080"))
-        self.calendar_name = os.getenv("SENTINEL_CALENDAR_NAME", "Story Sentinel Upgrades")
+        self.check_interval = int(os.getenv("CHECK_INTERVAL", "300"))
+        self.update_check_interval = int(os.getenv("UPDATE_CHECK_INTERVAL", "3600"))
+        self.api_host = os.getenv("API_HOST", "0.0.0.0")
+        self.api_port = int(os.getenv("API_PORT", "8080"))
+        self.calendar_name = os.getenv("CALENDAR_NAME", "Story Sentinel Upgrades")
         
-        # Paths with Docker support
-        data_dir = Path(os.getenv("SENTINEL_DATA_DIR", Path.home() / ".story-sentinel"))
+        # Paths configuration
+        data_dir = Path(os.getenv("DATA_DIR", Path.home() / ".story-sentinel"))
         self.story_home = Path(os.getenv("STORY_HOME", Path.home() / ".story"))
-        self.backup_dir = Path(os.getenv("BACKUP_DIR", data_dir / "backups"))
-        self.log_dir = Path(os.getenv("LOG_DIR", data_dir / "logs"))
-        self.db_path = Path(os.getenv("SENTINEL_DB_PATH", data_dir / "sentinel.db"))
+        self.backup_dir = Path(os.getenv("BACKUP_DIR", "/var/lib/story-sentinel/backups"))
+        self.log_dir = Path(os.getenv("LOG_DIR", "/var/log/story-sentinel"))
+        self.db_path = Path(os.getenv("DB_PATH", data_dir / "sentinel.db"))
         
-        # Docker-specific RPC endpoints
-        self.story_rpc_endpoint = os.getenv("SENTINEL_STORY_RPC", f"http://localhost:{self.story.rpc_port}")
-        self.story_geth_rpc_endpoint = os.getenv("SENTINEL_STORY_GETH_RPC", f"http://localhost:{self.story_geth.rpc_port}")
+        # RPC endpoints
+        self.story_rpc_endpoint = f"http://localhost:{self.story.rpc_port}"
+        self.story_geth_rpc_endpoint = f"http://localhost:{self.story_geth.rpc_port}"
         
         # Load YAML config if exists
         if self.config_path.exists():
@@ -198,68 +198,26 @@ class Config:
     def get_current_versions(self) -> Dict[str, str]:
         """Get current installed versions of Story components."""
         versions = {}
-        docker_mode = os.getenv('DOCKER_MODE')
         
         # Get Story version
         try:
-            if docker_mode:
-                # In Docker mode, try to get version from RPC
-                import requests
-                response = requests.get(f"{self.story_rpc_endpoint}/status", timeout=5)
-                data = response.json()
-                if 'result' in data and 'node_info' in data['result']:
-                    version = data['result']['node_info'].get('version', 'unknown')
-                    # Clean up version string (remove commit info if present)
-                    if '-' in version:
-                        version = version.split('-')[0]
-                    self.story.current_version = version
-                    versions['story'] = version
-                else:
-                    versions['story'] = "unknown"
-            else:
-                result = os.popen(f"{self.story.binary_path} version 2>/dev/null").read().strip()
-                self.story.current_version = result
-                versions['story'] = result
+            result = os.popen(f"{self.story.binary_path} version 2>/dev/null").read().strip()
+            self.story.current_version = result
+            versions['story'] = result
         except Exception as e:
             logger.error(f"Failed to get Story version: {e}")
             versions['story'] = "unknown"
             
         # Get Story-Geth version
         try:
-            if docker_mode:
-                # In Docker mode, try to get version from RPC
-                import requests
-                response = requests.post(
-                    self.story_geth_rpc_endpoint,
-                    json={"jsonrpc": "2.0", "method": "web3_clientVersion", "params": [], "id": 1},
-                    timeout=5
-                )
-                data = response.json()
-                if 'result' in data:
-                    # Extract version from client string like "Geth/v1.1.1-stable/..."
-                    client_version = data['result']
-                    if '/' in client_version and len(client_version.split('/')) > 1:
-                        version = client_version.split('/')[1]
-                        # Clean up version string (remove -stable suffix and extra info)
-                        if '-' in version:
-                            version = version.split('-')[0]
-                        if version.startswith('v'):
-                            version = version[1:]  # Remove 'v' prefix
-                        self.story_geth.current_version = version
-                        versions['story_geth'] = version
-                    else:
-                        versions['story_geth'] = client_version
-                else:
-                    versions['story_geth'] = "unknown"
+            result = os.popen(f"{self.story_geth.binary_path} version 2>/dev/null").read().strip()
+            # Parse geth version output
+            if "Version:" in result:
+                version_line = [l for l in result.split('\n') if 'Version:' in l][0]
+                self.story_geth.current_version = version_line.split('Version:')[1].strip()
             else:
-                result = os.popen(f"{self.story_geth.binary_path} version 2>/dev/null").read().strip()
-                # Parse geth version output
-                if "Version:" in result:
-                    version_line = [l for l in result.split('\n') if 'Version:' in l][0]
-                    self.story_geth.current_version = version_line.split('Version:')[1].strip()
-                else:
-                    self.story_geth.current_version = result
-                versions['story_geth'] = self.story_geth.current_version
+                self.story_geth.current_version = result
+            versions['story_geth'] = self.story_geth.current_version
         except Exception as e:
             logger.error(f"Failed to get Story-Geth version: {e}")
             versions['story_geth'] = "unknown"

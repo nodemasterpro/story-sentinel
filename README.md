@@ -1,9 +1,9 @@
-# Story Sentinel v1.1
+# Story Sentinel v1.2
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
-Story Sentinel is a production-ready automated monitoring and upgrade system for Story Protocol validator nodes. It provides health monitoring, automated version tracking, scheduled upgrades, and comprehensive alerting.
+Story Sentinel is a production-ready automated monitoring and upgrade system for Story Protocol validator nodes. It provides comprehensive health monitoring, automated version tracking, scheduled upgrades, and real-time alerting.
 
 ## Features
 
@@ -24,372 +24,381 @@ Story Sentinel monitors both components of a Story Protocol node:
 
 ## Quick Start 🚀
 
-**Prerequisites**: 
-- Docker (20.10+) and Docker Compose (2.0+) installed
-- Story Protocol node running and accessible
-- `curl` for downloading configuration files
+### Prerequisites
 
-**Install Docker & Docker Compose** (if needed):
+- **Ubuntu/Debian server** with Story Protocol installed and running
+- **Root access** for installation
+- **Story services** operational: `story` and `story-geth` (or variants)
+
+### One-Command Installation
+
 ```bash
-# Ubuntu/Debian
-curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
-sudo usermod -aG docker $USER
-# Log out and back in for group changes
-
-# Verify installation
-docker --version && docker compose version
+# Download and run quick installation
+curl -sSL https://raw.githubusercontent.com/nodemasterpro/story-sentinel/main/quick-start.sh | sudo bash
 ```
 
-1. **Setup files**:
-```bash
-# Download configuration template and docker-compose
-curl -O https://raw.githubusercontent.com/nodemasterpro/story-sentinel/main/.env.docker
-curl -O https://raw.githubusercontent.com/nodemasterpro/story-sentinel/main/docker-compose.yml
-mv .env.docker .env
-```
+The installer automatically detects:
+- ✅ Story binaries (`/usr/local/bin/story`, `/root/go/bin/story`)
+- ✅ Systemd services (`story`, `story-node`, `story-geth`)
+- ✅ RPC ports (26657, 22657 for Story / 8545, 2245 for Geth)
+- ✅ Story home directory (`/root/.story`)
 
-2. **Configure your setup** (edit `.env`):
-
-**REQUIRED - Check your actual values:**
-```bash
-# Find your service names
-systemctl list-units --type=service | grep -E '(story|geth)'
-
-# Find your binary paths  
-which story && which geth
-
-# Find your RPC ports
-netstat -tlnp | grep LISTEN | grep -E '(story|geth)'
-```
-
-**Then edit `.env`:**
-```bash
-# Your Story node RPC endpoints
-SENTINEL_STORY_RPC=http://127.0.0.1:22657
-SENTINEL_STORY_GETH_RPC=http://127.0.0.1:2245
-
-# Your actual service names (CRITICAL - must match your installation)
-SENTINEL_STORY_SERVICE=story-node
-SENTINEL_GETH_SERVICE=geth-node
-
-# Your actual binary paths
-SENTINEL_STORY_BINARY=/root/go/bin/story
-SENTINEL_GETH_BINARY=/root/go/bin/geth
-
-# Choose one notification method
-DISCORD_WEBHOOK=https://discord.com/api/webhooks/YOUR_WEBHOOK
-# OR
-TG_BOT_TOKEN=YOUR_BOT_TOKEN
-TG_CHAT_ID=YOUR_CHAT_ID
-```
-
-3. **Start Story Sentinel**:
-```bash
-docker-compose up -d
-```
-
-4. **Verify it's working**:
-```bash
-# Health check
-curl http://localhost:8080/health
-
-# View status
-docker-compose exec story-sentinel story-sentinel status
-```
-
-5. **Import calendar** (optional):
-```bash
-# Download upgrade calendar for your calendar app
-curl http://localhost:8080/next-upgrade.ics -o story-upgrades.ics
-# Import this file in Google Calendar, Outlook, Apple Calendar, etc.
-```
-
-### CLI Commands
-```bash
-# Check node status
-docker-compose exec story-sentinel story-sentinel status
-
-# Check for updates
-docker-compose exec story-sentinel story-sentinel check-updates
-
-# View scheduled upgrades
-docker-compose exec story-sentinel story-sentinel schedule
-
-# View logs
-docker-compose logs -f story-sentinel
-```
-
-### Management Commands
-```bash
-# Stop
-docker-compose down
-
-# Update to latest version
-docker-compose pull && docker-compose up -d
-
-# View persistent data
-docker volume inspect sentinel-data
-```
-
-## Custom Docker Build
-
-If you want to build a custom image:
+### Manual Installation
 
 ```bash
-# Clone the repository
+# Clone repository
 git clone https://github.com/nodemasterpro/story-sentinel.git
 cd story-sentinel
 
-# Build custom image
-docker build -t my-story-sentinel:latest .
+# Run installer
+sudo bash install.sh
 
-# Update docker-compose.yml to use your custom image
-# Change: image: nodemasterpro/story-sentinel:latest
-# To:     image: my-story-sentinel:latest
+# Configure notifications
+sudo nano /etc/story-sentinel/.env
 
-# Start with custom image
-docker-compose up -d
+# Start service
+sudo systemctl start story-sentinel
 ```
 
 ## Configuration
 
-### Configuration Files
+### Notification Setup
 
-With Docker, all configuration is managed through:
-- `.env` - Environment variables (main configuration)
-- `config.yaml` - Optional advanced configuration (auto-generated in Docker volume)
-- Persistent data stored in `sentinel-data` Docker volume
+Edit `/etc/story-sentinel/.env` to configure notifications:
 
-**Configuration Priority**: Environment variables (`.env`) > `config.yaml` > auto-detection
-
-### Essential Environment Variables (.env)
-
-**Required variables:**
-```env
-# Story node RPC endpoints (replace with your node's IP/ports)
-SENTINEL_STORY_RPC=http://10.0.0.100:22657
-SENTINEL_STORY_GETH_RPC=http://10.0.0.100:2245
-
-# Notifications (choose at least one)
+```bash
+# Discord Webhook
 DISCORD_WEBHOOK=https://discord.com/api/webhooks/YOUR_WEBHOOK
-# OR
-TG_BOT_TOKEN=YOUR_BOT_TOKEN
-TG_CHAT_ID=YOUR_CHAT_ID
+
+# OR Telegram Bot
+TG_BOT_TOKEN=123456789:ABC-DEFGHIJKLMNOPQRSTUVWXYZabcdefghijk
+TG_CHAT_ID=-1001234567890
 
 # Operation mode
 MODE=manual  # or 'auto' for automatic patch updates
 ```
 
-**Optional variables** (see `.env.docker` template for complete list):
-```env
-# Monitoring thresholds
-SENTINEL_HEIGHT_GAP=20
-SENTINEL_MIN_PEERS=5
-SENTINEL_MEMORY_LIMIT_GB=8.0
+### Service Configuration
 
-# API configuration
-SENTINEL_API_PORT=8080
-SENTINEL_LOG_LEVEL=INFO
-```
+Story Sentinel automatically detects your installation, but you can override settings:
 
-### Finding Your Node Endpoints
-
-To find your Story node RPC ports:
 ```bash
-# Check listening ports
-netstat -tlnp | grep LISTEN | grep -E '(story|geth)'
+# Story Node Configuration
+STORY_BINARY_PATH=/usr/local/bin/story
+STORY_SERVICE_NAME=story
+STORY_RPC_PORT=26657
 
-# Common configurations:
-# Story RPC: port 22657 or 26657
-# Story-Geth RPC: port 2245 or 8545
+# Story-Geth Configuration  
+STORY_GETH_BINARY_PATH=/usr/local/bin/story-geth
+STORY_GETH_SERVICE_NAME=story-geth
+STORY_GETH_RPC_PORT=8545
 ```
 
-### Common Port Configurations
+### Finding Your Configuration
 
-| Installation Type | Story RPC | Story-Geth RPC |
-|-------------------|-----------|----------------|
-| Standard | `26657` | `8545` |
-| NodeMaster/Custom | `22657` | `2245` |
+```bash
+# Check your Story services
+systemctl list-units --type=service | grep -E '(story|geth)'
 
-**Use the correct ports for your setup in `SENTINEL_STORY_RPC` and `SENTINEL_STORY_GETH_RPC`**
+# Check RPC ports
+netstat -tlnp | grep -E '(story|geth|26657|22657|8545|2245)'
 
-## Notifications Setup 🔔
+# Check binary locations
+which story && which story-geth
+```
 
-### Discord Webhook
-1. Go to your Discord server → Server Settings → Integrations → Webhooks
-2. Create New Webhook → Choose channel → Copy Webhook URL
-3. Add to `.env`: `DISCORD_WEBHOOK=https://discord.com/api/webhooks/...`
+## Usage
 
-### Telegram Bot
-1. Message [@BotFather](https://t.me/botfather) → `/newbot` → Choose name
-2. Get your bot token and start a chat with your bot
-3. Get your chat ID: Message [@userinfobot](https://t.me/userinfobot) or check `https://api.telegram.org/bot<TOKEN>/getUpdates`
-4. Add to `.env`:
-   ```
-   TG_BOT_TOKEN=123456789:ABC-DEFGHIJKLMNOPQRSTUVWXYZabcdefghijk
-   TG_CHAT_ID=-1001234567890
-   ```
-
-### Calendar Integration (iCS)
-Story Sentinel generates calendar files for upgrade scheduling:
-- **URL**: `http://your-server:8080/next-upgrade.ics`
-- **Google Calendar**: Add by URL in "Other calendars"
-- **Outlook**: Subscribe to calendar → From web
-- **Apple Calendar**: File → New Calendar Subscription
-
-## Advanced Usage
-
-### Command Line Interface (via Docker)
-
-All Story Sentinel commands are executed through the Docker container:
+### CLI Commands
 
 ```bash
 # Check node status
-docker-compose exec story-sentinel story-sentinel status
+story-sentinel status
 
 # Check for available updates
-docker-compose exec story-sentinel story-sentinel check-updates
-
-# View upgrade schedule
-docker-compose exec story-sentinel story-sentinel schedule
-
-# Schedule an upgrade (manual mode only)
-docker-compose exec story-sentinel story-sentinel schedule-upgrade story v1.3.0 --time "2024-01-15 02:00"
+story-sentinel check-updates
 
 # Perform manual upgrade
-docker-compose exec story-sentinel story-sentinel upgrade story v1.3.0
+story-sentinel upgrade story v1.2.1
 
 # View upgrade history
-docker-compose exec story-sentinel story-sentinel history
+story-sentinel history
 
-# Initialize/reconfigure (if needed)
-docker-compose exec story-sentinel story-sentinel init
+# Schedule an upgrade
+story-sentinel schedule-upgrade story v1.2.1 --time "2025-01-15 02:00"
+
+# View scheduled upgrades
+story-sentinel schedule
 ```
 
-**Note**: Configuration is automatically initialized on first start. Manual `init` is only needed for reconfiguration.
+### Service Management
 
-### Monitoring Endpoints
+```bash
+# Control the service
+sudo systemctl start|stop|restart|status story-sentinel
 
-- **Health Check**: `http://localhost:8080/health`
-- **Node Status**: `http://localhost:8080/status`
-- **Upgrade Schedule**: `http://localhost:8080/schedule`
-- **Calendar (ICS)**: `http://localhost:8080/next-upgrade.ics`
-- **Prometheus Metrics**: `http://localhost:8080/metrics`
+# View logs in real-time
+sudo journalctl -u story-sentinel -f
+
+# Reload configuration
+sudo systemctl reload story-sentinel
+```
+
+### API Endpoints
+
+The monitoring API is available on `http://localhost:8080`:
+
+```bash
+# General health
+curl http://localhost:8080/health
+
+# Detailed status
+curl http://localhost:8080/status
+
+# Upgrade calendar (iCS)
+curl http://localhost:8080/next-upgrade.ics
+
+# Prometheus metrics
+curl http://localhost:8080/metrics
+```
 
 ## Upgrade Process
 
-1. **Pre-upgrade Checks**:
-   - System resources (CPU, memory, disk)
-   - Node sync status
-   - Service health
+### Safety and Verification
 
-2. **Backup Creation**:
-   - Current binary backup
-   - Configuration backup
-   - Metadata recording
+1. **Pre-Upgrade Checks**:
+   - System health (CPU, RAM, disk)
+   - Node synchronization status
+   - Available resources
 
-3. **Binary Download**:
+2. **Automatic Backup**:
+   - Current binary copies
+   - Version metadata
+   - Timestamped for traceability
+
+3. **Download and Verification**:
    - Download from GitHub releases
-   - Fallback to source compilation
-   - SHA256 verification
+   - Integrity verification
+   - Execution testing
 
-4. **Service Management**:
-   - Graceful service stop
+4. **Secure Upgrade**:
+   - Graceful service shutdown
    - Binary replacement
-   - Service restart
+   - Controlled restart
 
-5. **Post-upgrade Verification**:
+5. **Post-Upgrade Verification**:
+   - Functionality testing
    - Version verification
-   - Service health check
    - Automatic rollback on failure
 
-## Safety Features
+### Operation Modes
 
-- **Automatic Backups**: Before each upgrade
-- **Health Checks**: Pre and post upgrade verification
-- **Rollback**: Automatic rollback on upgrade failure
-- **Rate Limiting**: GitHub API rate limiting
-- **Notification**: Real-time alerts for issues
+#### Manual Mode (Recommended)
+- Notifications of available updates
+- Upgrades on explicit command
+- Full administrator control
+
+#### Automatic Mode
+- Automatic patch updates
+- Pre/post notifications
+- Automatic rollback on issues
+
+### Rollback Management
+
+```bash
+# View available backups
+ls /var/lib/story-sentinel/backups/
+
+# Manual rollback to a backup
+story-sentinel rollback story backup_20241201_120000
+
+# Automatic rollback triggers on upgrade failure
+```
+
+## Notification Setup
+
+### Discord Webhook
+
+1. Go to: Server Settings → Integrations → Webhooks
+2. Create New Webhook → Choose channel → Copy Webhook URL
+3. Add to `/etc/story-sentinel/.env`: `DISCORD_WEBHOOK=https://discord.com/api/webhooks/...`
+
+### Telegram Bot
+
+1. Message [@BotFather](https://t.me/botfather) → `/newbot` → Choose name
+2. Get your bot token and start a chat with your bot
+3. Get your chat ID: Message [@userinfobot](https://t.me/userinfobot)
+4. Configure in `/etc/story-sentinel/.env`
+
+## Calendar Integration
+
+Story Sentinel generates iCS calendar files compatible with:
+
+- **Google Calendar**: Add by URL
+- **Outlook**: Subscribe to calendar
+- **Apple Calendar**: Calendar subscription
+
+```bash
+# Calendar URL
+http://your-server:8080/next-upgrade.ics
+
+# Download calendar file
+curl -o story-upgrades.ics http://localhost:8080/next-upgrade.ics
+```
+
+## Monitoring and Alerts
+
+### Monitored Metrics
+
+| Component | Metrics | Thresholds |
+|-----------|---------|------------|
+| **Story** | Block height, peers, sync | > 5 peers, sync OK |
+| **Story-Geth** | Block number, peers, sync | > 5 peers, sync OK |
+| **System** | CPU, RAM, disk | < 90% CPU, > 2GB RAM |
+
+### Alert Types
+
+- 🔴 **Critical**: Service stopped, fatal error
+- 🟡 **Warning**: Low peers, limited resources
+- 🟢 **Info**: Update available, successful upgrade
+
+## Configuration Files
+
+| File | Description |
+|------|-------------|
+| `/etc/story-sentinel/config.yaml` | Main configuration (auto-generated) |
+| `/etc/story-sentinel/.env` | Environment variables |
+| `/etc/systemd/system/story-sentinel.service` | Systemd service |
+
+## Advanced Configuration
+
+### Environment Variables
+
+```bash
+# Operation mode
+MODE=manual              # or 'auto' for automatic upgrades
+
+# Check intervals (seconds)
+CHECK_INTERVAL=300       # Health check
+UPDATE_CHECK_INTERVAL=3600  # Update check
+
+# Alert thresholds
+MIN_PEERS=5              # Minimum peer count
+MEMORY_LIMIT_GB=8.0      # Memory limit
+DISK_SPACE_MIN_GB=10.0   # Minimum disk space
+
+# API configuration
+API_HOST=0.0.0.0         # Listen interface
+API_PORT=8080            # API port
+```
 
 ## Troubleshooting
 
 ### Common Issues
 
 1. **Service won't start**:
-   ```bash
-   # Check logs
-   sudo journalctl -u story-sentinel -f
-   
-   # Verify configuration is loaded correctly
-   story-sentinel --config /etc/story-sentinel/config.yaml status
-   
-   # Check if service is using correct config file
-   cat /etc/systemd/system/story-sentinel.service | grep ExecStart
-   ```
+```bash
+# Check logs
+sudo journalctl -u story-sentinel -f
 
-2. **Configuration validation errors**:
-   ```bash
-   # Re-run init to detect current setup
-   story-sentinel init
-   
-   # Check service names
-   systemctl list-units --type=service | grep -E '(story|geth)'
-   
-   # Check RPC ports
-   netstat -tlnp | grep LISTEN | grep -E '(story|geth)'
-   
-   # Verify binary paths
-   which story && which geth
-   ```
+# Verify configuration
+story-sentinel status
+```
 
-2. **Upgrade failures**:
-   ```bash
-   # Check upgrade history
-   story-sentinel history
-   
-   # Manual rollback if needed
-   sudo /opt/story-sentinel/scripts/runner.sh rollback story /path/to/backup
-   ```
+2. **Auto-detection failed**:
+```bash
+# Check Story services
+sudo systemctl list-units --type=service | grep -E '(story|geth)'
 
-3. **Calendar integration**:
-   ```bash
-   # Download calendar file for external apps
-   curl http://localhost:8080/next-upgrade.ics -o story-upgrades.ics
-   
-   # Or serve via Nginx for team access
-   # Add to nginx config:
-   # location /story-calendar.ics {
-   #     proxy_pass http://localhost:8080/next-upgrade.ics;
-   # }
-   ```
+# Manually edit configuration
+sudo nano /etc/story-sentinel/.env
+```
+
+3. **Upgrade fails**:
+```bash
+# Check disk space
+df -h
+
+# Check GitHub connectivity
+curl -I https://github.com/piplabs/story/releases
+
+# View detailed logs
+tail -f /var/log/story-sentinel/upgrade.log
+```
 
 4. **Permission issues**:
-   ```bash
-   # The service runs as root to access node directories
-   # Ensure config files are readable
-   sudo chmod 644 /etc/story-sentinel/config.yaml
-   sudo chmod 600 /etc/story-sentinel/.env  # Keep secrets private
-   
-   # For systemd service access to /root directory:
-   # The service uses ProtectHome=false to access /root/.story
-   ```
+```bash
+# Fix file permissions
+sudo chown -R root:root /opt/story-sentinel
+sudo chmod +x /opt/story-sentinel/scripts/upgrade-runner.sh
+```
 
-5. **SystemD service configuration**:
-   ```bash
-   # Ensure the service uses the correct config file
-   sudo systemctl edit story-sentinel --full
-   # Verify ExecStart line includes: --config /etc/story-sentinel/config.yaml
-   
-   # Reload systemd after changes
-   sudo systemctl daemon-reload
-   sudo systemctl restart story-sentinel
-   ```
+### Logs and Diagnostics
 
-### Logs
+```bash
+# Main logs
+sudo journalctl -u story-sentinel -f
 
-- **Main service**: `sudo journalctl -u story-sentinel -f`
-- **Upgrade logs**: `/var/log/story-sentinel/runner.log`
-- **Application logs**: `/var/log/story-sentinel/sentinel.log`
+# Upgrade logs
+tail -f /var/log/story-sentinel/upgrade.log
+
+# Application logs
+tail -f /var/log/story-sentinel/sentinel.log
+
+# Detailed system status
+story-sentinel status --verbose
+```
+
+## Testing Installation
+
+```bash
+# Run installation tests
+sudo bash test-installation.sh
+
+# Test individual components
+story-sentinel status
+curl http://localhost:8080/health
+```
+
+## Uninstall
+
+```bash
+# Stop and disable service
+sudo systemctl stop story-sentinel
+sudo systemctl disable story-sentinel
+
+# Remove files
+sudo rm -rf /opt/story-sentinel
+sudo rm -rf /etc/story-sentinel
+sudo rm -rf /var/lib/story-sentinel
+sudo rm -rf /var/log/story-sentinel
+sudo rm /etc/systemd/system/story-sentinel.service
+sudo rm /usr/local/bin/story-sentinel
+
+# Reload systemd
+sudo systemctl daemon-reload
+```
+
+## Security
+
+### Best Practices
+
+- ✅ Service runs as root (required for systemctl)
+- ✅ Protected configuration files (644/600)
+- ✅ Binary integrity verification
+- ✅ Automatic backups before upgrades
+- ✅ Automatic rollback on failure
+- ✅ Detailed logging of all operations
+
+### File Permissions
+
+```bash
+# Secure secrets
+sudo chmod 600 /etc/story-sentinel/.env
+
+# Read-only configuration
+sudo chmod 644 /etc/story-sentinel/config.yaml
+```
 
 ## Development
 
@@ -397,24 +406,19 @@ docker-compose exec story-sentinel story-sentinel init
 
 ```
 story-sentinel/
-├── sentinel/
-│   ├── __init__.py
-│   ├── __main__.py      # CLI entry point
-│   ├── config.py        # Configuration management
-│   ├── health.py        # Health monitoring
-│   ├── watcher.py       # Version tracking
-│   ├── scheduler.py     # Upgrade scheduling
-│   ├── runner.py        # Upgrade execution
+├── sentinel/            # Main application
+│   ├── __main__.py     # CLI entry point
+│   ├── config.py       # Configuration management
+│   ├── health.py       # Health monitoring
+│   ├── watcher.py      # Version tracking
+│   ├── scheduler.py    # Upgrade scheduling
+│   ├── runner.py       # Upgrade execution
 │   └── api.py          # HTTP endpoints
 ├── scripts/
-│   ├── install.sh       # Installation script
-│   ├── runner.sh        # Bash upgrade wrapper
-│   └── systemd/         # Service definitions
-├── config/
-│   ├── config.yaml.example
-│   └── .env.example
-├── tests/
-└── docs/
+│   └── upgrade-runner.sh # System upgrade script
+├── install.sh          # Installation script
+├── quick-start.sh      # Quick installation
+└── test-installation.sh # Installation tests
 ```
 
 ### Running Tests
@@ -430,23 +434,11 @@ pytest tests/
 pytest --cov=sentinel tests/
 ```
 
-### Contributing
+## Support
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
-## Security Considerations
-
-- Service runs as root to access node data directories
-- Secure configuration files (chmod 644 for config.yaml, 600 for .env)
-- Use environment variables for secrets (.env file)
-- SystemD security features enabled (except ProtectHome=false for /root access)
-- Regular backup retention cleanup
-- Binary signature verification
-- Configuration stored in system directory (/etc/story-sentinel/)
+- **Issues**: [GitHub Issues](https://github.com/nodemasterpro/story-sentinel/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/nodemasterpro/story-sentinel/discussions)
+- **Documentation**: [Project Wiki](https://github.com/nodemasterpro/story-sentinel/wiki)
 
 ## License
 
@@ -456,13 +448,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - Story Protocol team for the blockchain platform
 - Contributors and testers
-- Open source dependencies
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/nodemasterpro/story-sentinel/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/nodemasterpro/story-sentinel/discussions)
-- **Security**: security@nodesforall.com
+- Open source community
 
 ---
 
+**🚀 Story Sentinel - Automated Monitoring and Upgrade System for Story Protocol**

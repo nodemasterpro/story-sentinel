@@ -49,8 +49,8 @@ def cli(ctx, config, log_level):
     config_path = Path(config) if config else None
     ctx.obj = Config(config_path=config_path)
     
-    # Only validate config for commands that need it (skip in Docker mode)
-    if ctx.invoked_subcommand not in ['init', 'version'] and not os.getenv('DOCKER_MODE'):
+    # Only validate config for commands that need it
+    if ctx.invoked_subcommand not in ['init', 'version']:
         if not ctx.obj.validate():
             click.echo("Configuration validation failed", err=True)
             click.echo("Run 'story-sentinel init' to initialize configuration", err=True)

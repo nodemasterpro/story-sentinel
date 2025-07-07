@@ -70,22 +70,18 @@ class HealthChecker:
         
         service_name = self.config.story_geth.service_name
         
-        # Check if service is running (skip in Docker mode)
-        docker_mode = os.getenv('DOCKER_MODE')
-        if not docker_mode:
-            try:
-                result = subprocess.run(
-                    ['systemctl', 'is-active', service_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                checks['service_running'] = result.stdout.strip() == 'active'
-            except Exception as e:
-                logger.error(f"Failed to check {service_name} service status: {e}")
-        else:
-            # In Docker mode, assume service is running if RPC responds
-            checks['service_running'] = True
+        # Check if service is running
+        try:
+            result = subprocess.run(
+                ['systemctl', 'is-active', service_name],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            checks['service_running'] = result.stdout.strip() == 'active'
+        except Exception as e:
+            logger.error(f"Failed to check {service_name} service status: {e}")
+            checks['service_running'] = False
             
         # Check RPC endpoint
         if checks['service_running']:
@@ -179,22 +175,18 @@ class HealthChecker:
         
         service_name = self.config.story.service_name
         
-        # Check if service is running (skip in Docker mode)
-        docker_mode = os.getenv('DOCKER_MODE')
-        if not docker_mode:
-            try:
-                result = subprocess.run(
-                    ['systemctl', 'is-active', service_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                checks['service_running'] = result.stdout.strip() == 'active'
-            except Exception as e:
-                logger.error(f"Failed to check {service_name} service status: {e}")
-        else:
-            # In Docker mode, assume service is running if RPC responds
-            checks['service_running'] = True
+        # Check if service is running
+        try:
+            result = subprocess.run(
+                ['systemctl', 'is-active', service_name],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            checks['service_running'] = result.stdout.strip() == 'active'
+        except Exception as e:
+            logger.error(f"Failed to check {service_name} service status: {e}")
+            checks['service_running'] = False
             
         # Check RPC endpoint
         if checks['service_running']:
