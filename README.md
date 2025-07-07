@@ -22,15 +22,29 @@ Story Sentinel monitors both components of a Story Protocol node:
 - **Story**: The consensus layer (Tendermint-based)
 - **Story-Geth**: The execution layer (modified Ethereum client)
 
-## Quick Start
+## Quick Start 🚀
 
-### Option 1: Docker (Recommended) 🐳
+**Prerequisites**: 
+- Docker (20.10+) and Docker Compose (2.0+) installed
+- Story Protocol node running and accessible
+- `curl` for downloading configuration files
 
-**Prerequisites**: Docker installed and Story node running
-
-1. **Download and setup**:
+**Install Docker & Docker Compose** (if needed):
 ```bash
+# Ubuntu/Debian
+curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
+sudo usermod -aG docker $USER
+# Log out and back in for group changes
+
+# Verify installation
+docker --version && docker compose version
+```
+
+1. **Setup files**:
+```bash
+# Download configuration template and docker-compose
 curl -O https://raw.githubusercontent.com/nodemasterpro/story-sentinel/main/.env.docker
+curl -O https://raw.githubusercontent.com/nodemasterpro/story-sentinel/main/docker-compose.yml
 mv .env.docker .env
 ```
 
@@ -47,151 +61,135 @@ TG_BOT_TOKEN=YOUR_BOT_TOKEN
 TG_CHAT_ID=YOUR_CHAT_ID
 ```
 
-3. **Run Story Sentinel**:
+3. **Start Story Sentinel**:
 ```bash
-docker run -d --name story-sentinel \
-  --env-file .env \
-  -p 8080:8080 \
-  -v sentinel-data:/data \
-  --restart unless-stopped \
-  nodemasterpro/story-sentinel:latest
+docker-compose up -d
 ```
 
-4. **Health check**:
+4. **Verify it's working**:
 ```bash
+# Health check
 curl http://localhost:8080/health
+
+# View status
+docker-compose exec story-sentinel story-sentinel status
 ```
 
-5. **Import calendar** (upgrades in your calendar app):
+5. **Import calendar** (optional):
 ```bash
+# Download upgrade calendar for your calendar app
 curl http://localhost:8080/next-upgrade.ics -o story-upgrades.ics
-# Import this file in Google Calendar, Outlook, etc.
+# Import this file in Google Calendar, Outlook, Apple Calendar, etc.
 ```
 
-**CLI commands via Docker**:
+### CLI Commands
 ```bash
-# Check status
-docker exec story-sentinel story-sentinel status
+# Check node status
+docker-compose exec story-sentinel story-sentinel status
 
 # Check for updates
-docker exec story-sentinel story-sentinel check-updates
+docker-compose exec story-sentinel story-sentinel check-updates
 
-# View upgrade schedule
-docker exec story-sentinel story-sentinel schedule
+# View scheduled upgrades
+docker-compose exec story-sentinel story-sentinel schedule
+
+# View logs
+docker-compose logs -f story-sentinel
 ```
 
-### Option 2: Native Installation
-
-**Prerequisites**: Ubuntu 22.04 LTS, Python 3.10+, systemd, sudo access
-
-1. Clone and install:
+### Management Commands
 ```bash
+# Stop
+docker-compose down
+
+# Update to latest version
+docker-compose pull && docker-compose up -d
+
+# View persistent data
+docker volume inspect sentinel-data
+```
+
+## Custom Docker Build
+
+If you want to build a custom image:
+
+```bash
+# Clone the repository
 git clone https://github.com/nodemasterpro/story-sentinel.git
-cd story-sentinel && cd scripts && sudo ./install.sh
-```
+cd story-sentinel
 
-2. Configure:
-```bash
-story-sentinel init  # Auto-detect your setup
-sudo nano /etc/story-sentinel/config.yaml  # Fine-tune if needed
-sudo nano /etc/story-sentinel/.env  # Add Discord/Telegram
-```
+# Build custom image
+docker build -t my-story-sentinel:latest .
 
-3. Start service:
-```bash
-sudo systemctl start story-sentinel && sudo systemctl enable story-sentinel
+# Update docker-compose.yml to use your custom image
+# Change: image: nodemasterpro/story-sentinel:latest
+# To:     image: my-story-sentinel:latest
+
+# Start with custom image
+docker-compose up -d
 ```
 
 ## Configuration
 
-### Configuration Locations
+### Configuration Files
 
-Story Sentinel stores configuration files in `/etc/story-sentinel/`:
-- `config.yaml` - Main configuration file
-- `.env` - Environment variables and secrets
+With Docker, all configuration is managed through:
+- `.env` - Environment variables (main configuration)
+- `config.yaml` - Optional advanced configuration (auto-generated in Docker volume)
+- Persistent data stored in `sentinel-data` Docker volume
 
-**Note**: Use `story-sentinel init` to automatically detect your node setup and create the initial configuration.
+**Configuration Priority**: Environment variables (`.env`) > `config.yaml` > auto-detection
 
-### Environment Variables (.env)
+### Essential Environment Variables (.env)
 
+**Required variables:**
 ```env
-# Notifications
-DISCORD_WEBHOOK=https://discord.com/api/webhooks/...
-TG_BOT_TOKEN=123456:ABC-DEF...
-TG_CHAT_ID=-1001234567890
+# Story node RPC endpoints (replace with your node's IP/ports)
+SENTINEL_STORY_RPC=http://10.0.0.100:22657
+SENTINEL_STORY_GETH_RPC=http://10.0.0.100:2245
+
+# Notifications (choose at least one)
+DISCORD_WEBHOOK=https://discord.com/api/webhooks/YOUR_WEBHOOK
+# OR
+TG_BOT_TOKEN=YOUR_BOT_TOKEN
+TG_CHAT_ID=YOUR_CHAT_ID
 
 # Operation mode
 MODE=manual  # or 'auto' for automatic patch updates
-
-# Paths (auto-detected by init command)
-STORY_HOME=/root/.story
 ```
 
-### Configuration File (config.yaml)
+**Optional variables** (see `.env.docker` template for complete list):
+```env
+# Monitoring thresholds
+SENTINEL_HEIGHT_GAP=20
+SENTINEL_MIN_PEERS=5
+SENTINEL_MEMORY_LIMIT_GB=8.0
 
-**Important**: Service names and binary paths vary depending on your installation method. Use `story-sentinel init` for automatic detection, or manually adjust based on your setup:
-
-```yaml
-story:
-  binary_path: /usr/local/bin/story  # or /root/go/bin/story
-  service_name: story-node           # or 'story' depending on setup
-  rpc_port: 22657                   # Story RPC port (check with netstat)
-  home: /root/.story                 # Story data directory
-  github_repo: piplabs/story
-  
-story_geth:
-  binary_path: /usr/local/bin/geth   # or /root/go/bin/geth
-  service_name: geth-node            # or 'story-geth' depending on setup
-  rpc_port: 2245                    # Story-Geth RPC port
-  github_repo: piplabs/story-geth
-  
-thresholds:
-  height_gap: 20
-  min_peers: 5
-  block_time_variance: 10
-  memory_limit_gb: 8.0
-  disk_space_min_gb: 10.0
+# API configuration
+SENTINEL_API_PORT=8080
+SENTINEL_LOG_LEVEL=INFO
 ```
 
-#### Finding Your Service Names
+### Finding Your Node Endpoints
 
-To check your actual service names:
+To find your Story node RPC ports:
 ```bash
-systemctl list-units --type=service | grep -E '(story|geth)'
-```
-
-#### Finding Your RPC Ports
-
-To check which ports your nodes are listening on:
-```bash
+# Check listening ports
 netstat -tlnp | grep LISTEN | grep -E '(story|geth)'
+
+# Common configurations:
+# Story RPC: port 22657 or 26657
+# Story-Geth RPC: port 2245 or 8545
 ```
 
-### Common Configuration Variations
+### Common Port Configurations
 
-Different Story node installation methods result in different configurations:
+| Installation Type | Story RPC | Story-Geth RPC |
+|-------------------|-----------|----------------|
+| Standard | `26657` | `8545` |
+| NodeMaster/Custom | `22657` | `2245` |
 
-#### Standard Installation
-```yaml
-story:
-  service_name: story
-  rpc_port: 26657
-story_geth:
-  service_name: story-geth
-  rpc_port: 8545
-```
-
-#### NodeMaster/Custom Installation
-```yaml
-story:
-  service_name: story-node
-  rpc_port: 22657
-story_geth:
-  service_name: geth-node
-  rpc_port: 2245
-```
-
-**Always run `story-sentinel init` to auto-detect your specific setup.**
+**Use the correct ports for your setup in `SENTINEL_STORY_RPC` and `SENTINEL_STORY_GETH_RPC`**
 
 ## Notifications Setup 🔔
 
@@ -217,60 +215,36 @@ Story Sentinel generates calendar files for upgrade scheduling:
 - **Outlook**: Subscribe to calendar → From web
 - **Apple Calendar**: File → New Calendar Subscription
 
-## Docker Compose (Alternative) 📋
+## Advanced Usage
 
-Create `docker-compose.yml`:
-```yaml
-version: '3.8'
-services:
-  story-sentinel:
-    image: nodemasterpro/story-sentinel:latest
-    container_name: story-sentinel
-    restart: unless-stopped
-    env_file: .env
-    volumes:
-      - sentinel-data:/data
-    ports:
-      - "8080:8080"
-    network_mode: host
+### Command Line Interface (via Docker)
 
-volumes:
-  sentinel-data:
-```
-
-Run with: `docker-compose up -d`
-
-## Usage
-
-### Command Line Interface
+All Story Sentinel commands are executed through the Docker container:
 
 ```bash
-# Initialize configuration (run once after installation)
-story-sentinel init
-
 # Check node status
-story-sentinel status
-# Or with specific config file:
-story-sentinel --config /etc/story-sentinel/config.yaml status
+docker-compose exec story-sentinel story-sentinel status
 
-# Check for updates
-story-sentinel check-updates
+# Check for available updates
+docker-compose exec story-sentinel story-sentinel check-updates
 
 # View upgrade schedule
-story-sentinel schedule
+docker-compose exec story-sentinel story-sentinel schedule
 
-# Schedule an upgrade
-story-sentinel schedule-upgrade story v1.3.0 --time "2024-01-15 02:00"
+# Schedule an upgrade (manual mode only)
+docker-compose exec story-sentinel story-sentinel schedule-upgrade story v1.3.0 --time "2024-01-15 02:00"
 
 # Perform manual upgrade
-story-sentinel upgrade story v1.3.0
+docker-compose exec story-sentinel story-sentinel upgrade story v1.3.0
 
 # View upgrade history
-story-sentinel history
+docker-compose exec story-sentinel story-sentinel history
 
-# Run monitoring (usually done by systemd)
-story-sentinel monitor
+# Initialize/reconfigure (if needed)
+docker-compose exec story-sentinel story-sentinel init
 ```
+
+**Note**: Configuration is automatically initialized on first start. Manual `init` is only needed for reconfiguration.
 
 ### Monitoring Endpoints
 
