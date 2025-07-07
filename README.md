@@ -48,11 +48,33 @@ curl -O https://raw.githubusercontent.com/nodemasterpro/story-sentinel/main/dock
 mv .env.docker .env
 ```
 
-2. **Configure essentials** (edit `.env`):
+2. **Configure your setup** (edit `.env`):
+
+**REQUIRED - Check your actual values:**
 ```bash
-# Your Story node RPC endpoints (replace with your actual IPs/ports)
+# Find your service names
+systemctl list-units --type=service | grep -E '(story|geth)'
+
+# Find your binary paths  
+which story && which geth
+
+# Find your RPC ports
+netstat -tlnp | grep LISTEN | grep -E '(story|geth)'
+```
+
+**Then edit `.env`:**
+```bash
+# Your Story node RPC endpoints
 SENTINEL_STORY_RPC=http://127.0.0.1:22657
 SENTINEL_STORY_GETH_RPC=http://127.0.0.1:2245
+
+# Your actual service names (CRITICAL - must match your installation)
+SENTINEL_STORY_SERVICE=story-node
+SENTINEL_GETH_SERVICE=geth-node
+
+# Your actual binary paths
+SENTINEL_STORY_BINARY=/root/go/bin/story
+SENTINEL_GETH_BINARY=/root/go/bin/geth
 
 # Choose one notification method
 DISCORD_WEBHOOK=https://discord.com/api/webhooks/YOUR_WEBHOOK
@@ -60,8 +82,6 @@ DISCORD_WEBHOOK=https://discord.com/api/webhooks/YOUR_WEBHOOK
 TG_BOT_TOKEN=YOUR_BOT_TOKEN
 TG_CHAT_ID=YOUR_CHAT_ID
 ```
-
-> **Note**: Use `127.0.0.1` if Story runs on the same server, or the actual IP if it's on another server.
 
 3. **Start Story Sentinel**:
 ```bash
