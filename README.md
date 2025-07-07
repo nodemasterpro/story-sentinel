@@ -24,42 +24,93 @@ Story Sentinel monitors both components of a Story Protocol node:
 
 ## Quick Start
 
-### Prerequisites
+### Option 1: Docker (Recommended) 🐳
 
-- Ubuntu 22.04 LTS
-- Python 3.10+
-- systemd
-- Story Protocol node already installed
-- sudo access for service management
+**Prerequisites**: Docker installed and Story node running
 
-### Installation
-
-1. Clone the repository:
+1. **Download and setup**:
 ```bash
-git clone https://github.com/yourusername/story-sentinel.git
-cd story-sentinel
+curl -O https://raw.githubusercontent.com/nodemasterpro/story-sentinel/main/.env.docker
+mv .env.docker .env
 ```
 
-2. Run the installation script:
+2. **Configure essentials** (edit `.env`):
 ```bash
-cd scripts
-sudo ./install.sh
+# Your Story node RPC endpoints (replace IP with your node)
+SENTINEL_STORY_RPC=http://10.0.0.100:22657
+SENTINEL_STORY_GETH_RPC=http://10.0.0.100:2245
+
+# Choose one notification method
+DISCORD_WEBHOOK=https://discord.com/api/webhooks/YOUR_WEBHOOK
+# OR
+TG_BOT_TOKEN=YOUR_BOT_TOKEN
+TG_CHAT_ID=YOUR_CHAT_ID
 ```
 
-3. Configure Story Sentinel:
+3. **Run Story Sentinel**:
 ```bash
-# Copy and edit the configuration
-sudo cp /etc/story-sentinel/.env.example /etc/story-sentinel/.env
-sudo nano /etc/story-sentinel/.env
+docker run -d --name story-sentinel \
+  --env-file .env \
+  -p 8080:8080 \
+  -v sentinel-data:/data \
+  --restart unless-stopped \
+  nodemasterpro/story-sentinel:latest
 ```
 
-4. Start the service:
+4. **Health check**:
 ```bash
-sudo systemctl start story-sentinel
-sudo systemctl enable story-sentinel
+curl http://localhost:8080/health
+```
+
+5. **Import calendar** (upgrades in your calendar app):
+```bash
+curl http://localhost:8080/next-upgrade.ics -o story-upgrades.ics
+# Import this file in Google Calendar, Outlook, etc.
+```
+
+**CLI commands via Docker**:
+```bash
+# Check status
+docker exec story-sentinel story-sentinel status
+
+# Check for updates
+docker exec story-sentinel story-sentinel check-updates
+
+# View upgrade schedule
+docker exec story-sentinel story-sentinel schedule
+```
+
+### Option 2: Native Installation
+
+**Prerequisites**: Ubuntu 22.04 LTS, Python 3.10+, systemd, sudo access
+
+1. Clone and install:
+```bash
+git clone https://github.com/nodemasterpro/story-sentinel.git
+cd story-sentinel && cd scripts && sudo ./install.sh
+```
+
+2. Configure:
+```bash
+story-sentinel init  # Auto-detect your setup
+sudo nano /etc/story-sentinel/config.yaml  # Fine-tune if needed
+sudo nano /etc/story-sentinel/.env  # Add Discord/Telegram
+```
+
+3. Start service:
+```bash
+sudo systemctl start story-sentinel && sudo systemctl enable story-sentinel
 ```
 
 ## Configuration
+
+### Configuration Locations
+
+Story Sentinel stores configuration files in `/etc/story-sentinel/`:
+- `config.yaml` - Main configuration file
+- `.env` - Environment variables and secrets
+
+**Note**: Use `story-sentinel init` to automatically detect your node setup and create the initial configuration.
 
 ### Environment Variables (.env)
 
@@ -72,36 +123,135 @@ TG_CHAT_ID=-1001234567890
 # Operation mode
 MODE=manual  # or 'auto' for automatic patch updates
 
-# Paths (usually auto-detected)
-STORY_HOME=/home/story/.story
+# Paths (auto-detected by init command)
+STORY_HOME=/root/.story
 ```
 
 ### Configuration File (config.yaml)
 
+**Important**: Service names and binary paths vary depending on your installation method. Use `story-sentinel init` for automatic detection, or manually adjust based on your setup:
+
 ```yaml
 story:
-  binary_path: /usr/local/bin/story
-  service_name: story
-  rpc_port: 26657
+  binary_path: /usr/local/bin/story  # or /root/go/bin/story
+  service_name: story-node           # or 'story' depending on setup
+  rpc_port: 22657                   # Story RPC port (check with netstat)
+  home: /root/.story                 # Story data directory
+  github_repo: piplabs/story
   
 story_geth:
-  binary_path: /usr/local/bin/story-geth
-  service_name: story-geth
-  rpc_port: 8545
+  binary_path: /usr/local/bin/geth   # or /root/go/bin/geth
+  service_name: geth-node            # or 'story-geth' depending on setup
+  rpc_port: 2245                    # Story-Geth RPC port
+  github_repo: piplabs/story-geth
   
 thresholds:
   height_gap: 20
   min_peers: 5
+  block_time_variance: 10
+  memory_limit_gb: 8.0
   disk_space_min_gb: 10.0
 ```
+
+#### Finding Your Service Names
+
+To check your actual service names:
+```bash
+systemctl list-units --type=service | grep -E '(story|geth)'
+```
+
+#### Finding Your RPC Ports
+
+To check which ports your nodes are listening on:
+```bash
+netstat -tlnp | grep LISTEN | grep -E '(story|geth)'
+```
+
+### Common Configuration Variations
+
+Different Story node installation methods result in different configurations:
+
+#### Standard Installation
+```yaml
+story:
+  service_name: story
+  rpc_port: 26657
+story_geth:
+  service_name: story-geth
+  rpc_port: 8545
+```
+
+#### NodeMaster/Custom Installation
+```yaml
+story:
+  service_name: story-node
+  rpc_port: 22657
+story_geth:
+  service_name: geth-node
+  rpc_port: 2245
+```
+
+**Always run `story-sentinel init` to auto-detect your specific setup.**
+
+## Notifications Setup 🔔
+
+### Discord Webhook
+1. Go to your Discord server → Server Settings → Integrations → Webhooks
+2. Create New Webhook → Choose channel → Copy Webhook URL
+3. Add to `.env`: `DISCORD_WEBHOOK=https://discord.com/api/webhooks/...`
+
+### Telegram Bot
+1. Message [@BotFather](https://t.me/botfather) → `/newbot` → Choose name
+2. Get your bot token and start a chat with your bot
+3. Get your chat ID: Message [@userinfobot](https://t.me/userinfobot) or check `https://api.telegram.org/bot<TOKEN>/getUpdates`
+4. Add to `.env`:
+   ```
+   TG_BOT_TOKEN=123456789:ABC-DEFGHIJKLMNOPQRSTUVWXYZabcdefghijk
+   TG_CHAT_ID=-1001234567890
+   ```
+
+### Calendar Integration (iCS)
+Story Sentinel generates calendar files for upgrade scheduling:
+- **URL**: `http://your-server:8080/next-upgrade.ics`
+- **Google Calendar**: Add by URL in "Other calendars"
+- **Outlook**: Subscribe to calendar → From web
+- **Apple Calendar**: File → New Calendar Subscription
+
+## Docker Compose (Alternative) 📋
+
+Create `docker-compose.yml`:
+```yaml
+version: '3.8'
+services:
+  story-sentinel:
+    image: nodemasterpro/story-sentinel:latest
+    container_name: story-sentinel
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - sentinel-data:/data
+    ports:
+      - "8080:8080"
+    network_mode: host
+
+volumes:
+  sentinel-data:
+```
+
+Run with: `docker-compose up -d`
 
 ## Usage
 
 ### Command Line Interface
 
 ```bash
+# Initialize configuration (run once after installation)
+story-sentinel init
+
 # Check node status
 story-sentinel status
+# Or with specific config file:
+story-sentinel --config /etc/story-sentinel/config.yaml status
 
 # Check for updates
 story-sentinel check-updates
@@ -174,8 +324,26 @@ story-sentinel monitor
    # Check logs
    sudo journalctl -u story-sentinel -f
    
-   # Verify configuration
-   sudo -u story-sentinel story-sentinel status
+   # Verify configuration is loaded correctly
+   story-sentinel --config /etc/story-sentinel/config.yaml status
+   
+   # Check if service is using correct config file
+   cat /etc/systemd/system/story-sentinel.service | grep ExecStart
+   ```
+
+2. **Configuration validation errors**:
+   ```bash
+   # Re-run init to detect current setup
+   story-sentinel init
+   
+   # Check service names
+   systemctl list-units --type=service | grep -E '(story|geth)'
+   
+   # Check RPC ports
+   netstat -tlnp | grep LISTEN | grep -E '(story|geth)'
+   
+   # Verify binary paths
+   which story && which geth
    ```
 
 2. **Upgrade failures**:
@@ -201,9 +369,24 @@ story-sentinel monitor
 
 4. **Permission issues**:
    ```bash
-   # Fix permissions
-   sudo chown -R story-sentinel:story-sentinel /opt/story-sentinel
-   sudo chown -R story-sentinel:story-sentinel /var/log/story-sentinel
+   # The service runs as root to access node directories
+   # Ensure config files are readable
+   sudo chmod 644 /etc/story-sentinel/config.yaml
+   sudo chmod 600 /etc/story-sentinel/.env  # Keep secrets private
+   
+   # For systemd service access to /root directory:
+   # The service uses ProtectHome=false to access /root/.story
+   ```
+
+5. **SystemD service configuration**:
+   ```bash
+   # Ensure the service uses the correct config file
+   sudo systemctl edit story-sentinel --full
+   # Verify ExecStart line includes: --config /etc/story-sentinel/config.yaml
+   
+   # Reload systemd after changes
+   sudo systemctl daemon-reload
+   sudo systemctl restart story-sentinel
    ```
 
 ### Logs
@@ -261,12 +444,13 @@ pytest --cov=sentinel tests/
 
 ## Security Considerations
 
-- Run with minimal privileges (dedicated user)
-- Secure configuration files (chmod 600)
-- Use environment variables for secrets
-- Enable systemd security features
+- Service runs as root to access node data directories
+- Secure configuration files (chmod 644 for config.yaml, 600 for .env)
+- Use environment variables for secrets (.env file)
+- SystemD security features enabled (except ProtectHome=false for /root access)
 - Regular backup retention cleanup
 - Binary signature verification
+- Configuration stored in system directory (/etc/story-sentinel/)
 
 ## License
 
@@ -286,4 +470,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-Made with ❤️ for the Story Protocol validator community

@@ -51,38 +51,56 @@ class Config:
         if self.env_path.exists():
             load_dotenv(self.env_path)
         
-        # Initialize configurations
+        # Initialize configurations with environment priority
         self.story: ServiceConfig = ServiceConfig(
-            binary_path=os.getenv("STORY_BINARY_PATH", "/usr/local/bin/story"),
-            service_name="story",
-            rpc_port=26657,
+            binary_path=os.getenv("SENTINEL_STORY_BINARY", os.getenv("STORY_BINARY_PATH", "/usr/local/bin/story")),
+            service_name=os.getenv("SENTINEL_STORY_SERVICE", "story"),
+            rpc_port=int(os.getenv("SENTINEL_STORY_RPC_PORT", "26657")),
             github_repo="piplabs/story"
         )
         
         self.story_geth: ServiceConfig = ServiceConfig(
-            binary_path=os.getenv("STORY_GETH_BINARY_PATH", "/usr/local/bin/story-geth"),
-            service_name="story-geth",
-            rpc_port=8545,
+            binary_path=os.getenv("SENTINEL_GETH_BINARY", os.getenv("STORY_GETH_BINARY_PATH", "/usr/local/bin/story-geth")),
+            service_name=os.getenv("SENTINEL_GETH_SERVICE", "story-geth"),
+            rpc_port=int(os.getenv("SENTINEL_GETH_RPC_PORT", "8545")),
             version_command="version",
             github_repo="piplabs/story-geth"
         )
         
-        self.thresholds = ThresholdConfig()
+        self.thresholds = ThresholdConfig(
+            height_gap=int(os.getenv("SENTINEL_HEIGHT_GAP", "20")),
+            min_peers=int(os.getenv("SENTINEL_MIN_PEERS", "5")),
+            block_time_variance=int(os.getenv("SENTINEL_BLOCK_TIME_VARIANCE", "10")),
+            memory_limit_gb=float(os.getenv("SENTINEL_MEMORY_LIMIT_GB", "8.0")),
+            disk_space_min_gb=float(os.getenv("SENTINEL_DISK_SPACE_MIN_GB", "10.0"))
+        )
         self.notifications = NotificationConfig(
             discord_webhook=os.getenv("DISCORD_WEBHOOK"),
             telegram_bot_token=os.getenv("TG_BOT_TOKEN"),
             telegram_chat_id=os.getenv("TG_CHAT_ID")
         )
         
-        # General settings
+        # General settings with environment priority
         self.mode = os.getenv("MODE", "manual")  # auto|manual
-        self.log_level = os.getenv("LOG_LEVEL", "INFO")
+        self.log_level = os.getenv("SENTINEL_LOG_LEVEL", os.getenv("LOG_LEVEL", "INFO"))
         self.backup_retention_days = int(os.getenv("BACKUP_RETENTION_DAYS", "30"))
         self.max_upgrade_duration = int(os.getenv("MAX_UPGRADE_DURATION", "600"))
-        self.check_interval = int(os.getenv("CHECK_INTERVAL", "300"))  # 5 minutes
+        self.check_interval = int(os.getenv("SENTINEL_CHECK_INTERVAL", os.getenv("CHECK_INTERVAL", "300")))
+        self.update_check_interval = int(os.getenv("SENTINEL_UPDATE_CHECK_INTERVAL", "3600"))
+        self.api_host = os.getenv("SENTINEL_API_HOST", "0.0.0.0")
+        self.api_port = int(os.getenv("SENTINEL_API_PORT", "8080"))
+        self.calendar_name = os.getenv("SENTINEL_CALENDAR_NAME", "Story Sentinel Upgrades")
+        
+        # Paths with Docker support
+        data_dir = Path(os.getenv("SENTINEL_DATA_DIR", Path.home() / ".story-sentinel"))
         self.story_home = Path(os.getenv("STORY_HOME", Path.home() / ".story"))
-        self.backup_dir = Path(os.getenv("BACKUP_DIR", Path.home() / ".story-sentinel" / "backups"))
-        self.log_dir = Path(os.getenv("LOG_DIR", Path.home() / ".story-sentinel" / "logs"))
+        self.backup_dir = Path(os.getenv("BACKUP_DIR", data_dir / "backups"))
+        self.log_dir = Path(os.getenv("LOG_DIR", data_dir / "logs"))
+        self.db_path = Path(os.getenv("SENTINEL_DB_PATH", data_dir / "sentinel.db"))
+        
+        # Docker-specific RPC endpoints
+        self.story_rpc_endpoint = os.getenv("SENTINEL_STORY_RPC", f"http://localhost:{self.story.rpc_port}")
+        self.story_geth_rpc_endpoint = os.getenv("SENTINEL_STORY_GETH_RPC", f"http://localhost:{self.story_geth.rpc_port}")
         
         # Load YAML config if exists
         if self.config_path.exists():
@@ -94,33 +112,44 @@ class Config:
             with open(self.config_path, 'r') as f:
                 data = yaml.safe_load(f)
                 
-            # Update Story configuration
+            # Update Story configuration (only if not overridden by environment)
             if 'story' in data:
                 story_data = data['story']
-                self.story.binary_path = story_data.get('binary_path', self.story.binary_path)
-                self.story.service_name = story_data.get('service_name', self.story.service_name)
-                self.story.rpc_port = story_data.get('rpc_port', self.story.rpc_port)
+                if not os.getenv("SENTINEL_STORY_BINARY"):
+                    self.story.binary_path = story_data.get('binary_path', self.story.binary_path)
+                if not os.getenv("SENTINEL_STORY_SERVICE"):
+                    self.story.service_name = story_data.get('service_name', self.story.service_name)
+                if not os.getenv("SENTINEL_STORY_RPC_PORT"):
+                    self.story.rpc_port = story_data.get('rpc_port', self.story.rpc_port)
                 self.story.github_repo = story_data.get('github_repo', self.story.github_repo)
                 
-            # Update Story-Geth configuration
+            # Update Story-Geth configuration (only if not overridden by environment)
             if 'story_geth' in data:
                 geth_data = data['story_geth']
-                self.story_geth.binary_path = geth_data.get('binary_path', self.story_geth.binary_path)
-                self.story_geth.service_name = geth_data.get('service_name', self.story_geth.service_name)
-                self.story_geth.rpc_port = geth_data.get('rpc_port', self.story_geth.rpc_port)
+                if not os.getenv("SENTINEL_GETH_BINARY"):
+                    self.story_geth.binary_path = geth_data.get('binary_path', self.story_geth.binary_path)
+                if not os.getenv("SENTINEL_GETH_SERVICE"):
+                    self.story_geth.service_name = geth_data.get('service_name', self.story_geth.service_name)
+                if not os.getenv("SENTINEL_GETH_RPC_PORT"):
+                    self.story_geth.rpc_port = geth_data.get('rpc_port', self.story_geth.rpc_port)
                 self.story_geth.github_repo = geth_data.get('github_repo', self.story_geth.github_repo)
                 
-            # Update thresholds
+            # Update thresholds (only if not overridden by environment)
             if 'thresholds' in data:
                 thresh_data = data['thresholds']
-                self.thresholds.height_gap = thresh_data.get('height_gap', self.thresholds.height_gap)
-                self.thresholds.min_peers = thresh_data.get('min_peers', self.thresholds.min_peers)
-                self.thresholds.block_time_variance = thresh_data.get('block_time_variance', 
-                                                                     self.thresholds.block_time_variance)
-                self.thresholds.memory_limit_gb = thresh_data.get('memory_limit_gb', 
-                                                                  self.thresholds.memory_limit_gb)
-                self.thresholds.disk_space_min_gb = thresh_data.get('disk_space_min_gb',
-                                                                    self.thresholds.disk_space_min_gb)
+                if not os.getenv("SENTINEL_HEIGHT_GAP"):
+                    self.thresholds.height_gap = thresh_data.get('height_gap', self.thresholds.height_gap)
+                if not os.getenv("SENTINEL_MIN_PEERS"):
+                    self.thresholds.min_peers = thresh_data.get('min_peers', self.thresholds.min_peers)
+                if not os.getenv("SENTINEL_BLOCK_TIME_VARIANCE"):
+                    self.thresholds.block_time_variance = thresh_data.get('block_time_variance', 
+                                                                         self.thresholds.block_time_variance)
+                if not os.getenv("SENTINEL_MEMORY_LIMIT_GB"):
+                    self.thresholds.memory_limit_gb = thresh_data.get('memory_limit_gb', 
+                                                                      self.thresholds.memory_limit_gb)
+                if not os.getenv("SENTINEL_DISK_SPACE_MIN_GB"):
+                    self.thresholds.disk_space_min_gb = thresh_data.get('disk_space_min_gb',
+                                                                        self.thresholds.disk_space_min_gb)
                 
             logger.info(f"Loaded configuration from {self.config_path}")
             
