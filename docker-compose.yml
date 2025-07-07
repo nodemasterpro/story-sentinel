@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   story-sentinel:
     build: .
@@ -9,6 +7,10 @@ services:
     # Load environment variables from .env file
     env_file:
       - .env
+    
+    # Docker mode for CLI commands
+    environment:
+      - DOCKER_MODE=1
     
     # Persistent data volume
     volumes:

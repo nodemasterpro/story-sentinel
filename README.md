@@ -50,9 +50,9 @@ mv .env.docker .env
 
 2. **Configure essentials** (edit `.env`):
 ```bash
-# Your Story node RPC endpoints (replace IP with your node)
-SENTINEL_STORY_RPC=http://10.0.0.100:22657
-SENTINEL_STORY_GETH_RPC=http://10.0.0.100:2245
+# Your Story node RPC endpoints (replace with your actual IPs/ports)
+SENTINEL_STORY_RPC=http://127.0.0.1:22657
+SENTINEL_STORY_GETH_RPC=http://127.0.0.1:2245
 
 # Choose one notification method
 DISCORD_WEBHOOK=https://discord.com/api/webhooks/YOUR_WEBHOOK
@@ -60,6 +60,8 @@ DISCORD_WEBHOOK=https://discord.com/api/webhooks/YOUR_WEBHOOK
 TG_BOT_TOKEN=YOUR_BOT_TOKEN
 TG_CHAT_ID=YOUR_CHAT_ID
 ```
+
+> **Note**: Use `127.0.0.1` if Story runs on the same server, or the actual IP if it's on another server.
 
 3. **Start Story Sentinel**:
 ```bash

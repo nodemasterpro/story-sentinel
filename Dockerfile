@@ -38,17 +38,39 @@ EXPOSE 8080
 
 # Create entrypoint script
 RUN echo '#!/bin/bash\n\
-# Create config if not exists\n\
-if [ ! -f /data/config.yaml ]; then\n\
-    echo "Initializing configuration..."\n\
-    story-sentinel --data-dir /data init\n\
-fi\n\
+set -e\n\
+\n\
+# Set data directory environment variables\n\
+export SENTINEL_CONFIG_DIR=/data\n\
+export SENTINEL_DATA_DIR=/data\n\
+export BACKUP_DIR=/data/backups\n\
+export LOG_DIR=/data/logs\n\
+\n\
+# Skip config.yaml generation - we use environment variables\n\
+echo "Using environment-based configuration..."\n\
 \n\
 # Start API server in background\n\
-story-sentinel --data-dir /data api &\n\
+python -m sentinel.api &\n\
+API_PID=$!\n\
 \n\
-# Start monitoring\n\
-exec story-sentinel --data-dir /data monitor\n\
+# Function to cleanup on exit\n\
+cleanup() {\n\
+    echo "Shutting down..."\n\
+    kill $API_PID 2>/dev/null || true\n\
+    exit 0\n\
+}\n\
+\n\
+# Set up signal handlers\n\
+trap cleanup SIGTERM SIGINT\n\
+\n\
+# Start monitoring (skip validation for Docker mode)\n\
+echo "Starting Story Sentinel monitoring..."\n\
+export DOCKER_MODE=1\n\
+story-sentinel monitor &\n\
+MONITOR_PID=$!\n\
+\n\
+# Wait for processes\n\
+wait $MONITOR_PID\n\
 ' > /entrypoint.sh && chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
