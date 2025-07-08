@@ -5,6 +5,12 @@
 
 set -e
 
+# Function to handle errors
+error_exit() {
+    echo -e "${RED}Error: $1${NC}" >&2
+    exit 1
+}
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -43,9 +49,54 @@ echo -e "${GREEN}✓${NC} Detected OS: $OS $VER"
 
 # Install system dependencies
 echo -e "${YELLOW}Installing system dependencies...${NC}"
-apt-get update -qq
-apt-get install -y python3 python3-pip python3-venv git curl wget systemctl sqlite3 > /dev/null 2>&1
-echo -e "${GREEN}✓${NC} System dependencies installed"
+
+# Update package list
+echo -n "Updating package list... "
+if apt-get update -qq > /dev/null 2>&1; then
+    echo "✓"
+else
+    echo "⚠ (warning, but continuing)"
+fi
+
+# Install packages individually to handle errors better
+packages="python3 python3-pip python3-venv git curl wget sqlite3"
+failed_packages=""
+
+for package in $packages; do
+    if ! dpkg -l | grep -q "^ii  $package "; then
+        echo -n "Installing $package... "
+        # Disable exit on error temporarily for package installation
+        set +e
+        apt-get install -y "$package" > /dev/null 2>&1
+        result=$?
+        set -e
+        
+        if [[ $result -eq 0 ]]; then
+            echo "✓"
+        else
+            echo "⚠ (failed - may need manual installation)"
+            failed_packages="$failed_packages $package"
+        fi
+    else
+        echo "$package already installed ✓"
+    fi
+done
+
+# Show warning for failed packages but continue
+if [[ -n "$failed_packages" ]]; then
+    echo -e "${YELLOW}⚠ Some packages failed to install:$failed_packages${NC}"
+    echo -e "${YELLOW}  Installation will continue, but you may need to install these manually${NC}"
+fi
+
+# Try to install systemctl package (not critical)
+set +e
+apt-get install -y systemctl > /dev/null 2>&1
+set -e
+
+echo -e "${GREEN}✓${NC} System dependencies ready"
+
+# Add debug checkpoint
+echo -e "${BLUE}[DEBUG]${NC} Dependency installation complete, proceeding to Story detection..."
 
 # Detect Story Protocol installation
 echo -e "${YELLOW}Detecting Story Protocol installation...${NC}"
@@ -57,7 +108,8 @@ STORY_GETH_SERVICE=""
 STORY_HOME=""
 
 # Find Story binary
-for path in "/usr/local/bin/story" "/root/go/bin/story" "/home/*/go/bin/story" "$(which story 2>/dev/null)"; do
+echo -e "${BLUE}[DEBUG]${NC} Searching for Story binary..."
+for path in "/usr/local/bin/story" "/root/go/bin/story"; do
     if [[ -x "$path" ]]; then
         STORY_BINARY="$path"
         echo -e "${GREEN}✓${NC} Found Story binary: $STORY_BINARY"
@@ -65,8 +117,27 @@ for path in "/usr/local/bin/story" "/root/go/bin/story" "/home/*/go/bin/story" "
     fi
 done
 
-# Find Story-Geth binary  
-for path in "/usr/local/bin/story-geth" "/usr/local/bin/geth" "/root/go/bin/geth" "/home/*/go/bin/geth" "$(which geth 2>/dev/null)"; do
+# Check home directories manually 
+for home_dir in /home/*; do
+    if [[ -d "$home_dir" ]] && [[ -x "$home_dir/go/bin/story" ]]; then
+        STORY_BINARY="$home_dir/go/bin/story"
+        echo -e "${GREEN}✓${NC} Found Story binary: $STORY_BINARY"
+        break
+    fi
+done
+
+# Check which command
+if [[ -z "$STORY_BINARY" ]]; then
+    which_result="$(which story 2>/dev/null || true)"
+    if [[ -n "$which_result" ]] && [[ -x "$which_result" ]]; then
+        STORY_BINARY="$which_result"
+        echo -e "${GREEN}✓${NC} Found Story binary: $STORY_BINARY"
+    fi
+fi
+
+# Find Story-Geth binary
+echo -e "${BLUE}[DEBUG]${NC} Searching for Story-Geth binary..."
+for path in "/usr/local/bin/story-geth" "/usr/local/bin/geth" "/root/go/bin/geth"; do
     if [[ -x "$path" ]]; then
         STORY_GETH_BINARY="$path"
         echo -e "${GREEN}✓${NC} Found Story-Geth binary: $STORY_GETH_BINARY"
@@ -74,7 +145,26 @@ for path in "/usr/local/bin/story-geth" "/usr/local/bin/geth" "/root/go/bin/geth
     fi
 done
 
+# Check home directories manually 
+for home_dir in /home/*; do
+    if [[ -d "$home_dir" ]] && [[ -x "$home_dir/go/bin/geth" ]]; then
+        STORY_GETH_BINARY="$home_dir/go/bin/geth"
+        echo -e "${GREEN}✓${NC} Found Story-Geth binary: $STORY_GETH_BINARY"
+        break
+    fi
+done
+
+# Check which command
+if [[ -z "$STORY_GETH_BINARY" ]]; then
+    which_result="$(which geth 2>/dev/null || true)"
+    if [[ -n "$which_result" ]] && [[ -x "$which_result" ]]; then
+        STORY_GETH_BINARY="$which_result"
+        echo -e "${GREEN}✓${NC} Found Story-Geth binary: $STORY_GETH_BINARY"
+    fi
+fi
+
 # Find Story services
+echo -e "${BLUE}[DEBUG]${NC} Searching for Story services..."
 for service in "story" "story-node" "story-testnet"; do
     if systemctl list-units --all --type=service | grep -q "$service.service"; then
         STORY_SERVICE="$service"
@@ -83,6 +173,7 @@ for service in "story" "story-node" "story-testnet"; do
     fi
 done
 
+echo -e "${BLUE}[DEBUG]${NC} Searching for Story-Geth services..."
 for service in "story-geth" "geth" "geth-node"; do
     if systemctl list-units --all --type=service | grep -q "$service.service"; then
         STORY_GETH_SERVICE="$service"
@@ -92,27 +183,44 @@ for service in "story-geth" "geth" "geth-node"; do
 done
 
 # Find Story home directory
-for path in "/root/.story" "/home/*/.story"; do
-    if [[ -d "$path" ]]; then
-        STORY_HOME="$path"
-        echo -e "${GREEN}✓${NC} Found Story home: $STORY_HOME"
-        break
-    fi
-done
+echo -e "${BLUE}[DEBUG]${NC} Searching for Story home directory..."
+if [[ -d "/root/.story" ]]; then
+    STORY_HOME="/root/.story"
+    echo -e "${GREEN}✓${NC} Found Story home: $STORY_HOME"
+else
+    # Check home directories manually
+    for home_dir in /home/*; do
+        if [[ -d "$home_dir" ]] && [[ -d "$home_dir/.story" ]]; then
+            STORY_HOME="$home_dir/.story"
+            echo -e "${GREEN}✓${NC} Found Story home: $STORY_HOME"
+            break
+        fi
+    done
+fi
 
-# Verify critical components
-if [[ -z "$STORY_BINARY" ]] || [[ -z "$STORY_GETH_BINARY" ]] || [[ -z "$STORY_SERVICE" ]] || [[ -z "$STORY_GETH_SERVICE" ]]; then
-    echo -e "${RED}❌ Could not detect complete Story Protocol installation${NC}"
-    echo "Please ensure Story Protocol is properly installed and running."
-    echo "Found:"
-    echo "  Story binary: ${STORY_BINARY:-'Not found'}"
-    echo "  Story-Geth binary: ${STORY_GETH_BINARY:-'Not found'}"
-    echo "  Story service: ${STORY_SERVICE:-'Not found'}"  
-    echo "  Story-Geth service: ${STORY_GETH_SERVICE:-'Not found'}"
-    exit 1
+# Set defaults if not found
+if [[ -z "$STORY_BINARY" ]]; then
+    STORY_BINARY="/usr/local/bin/story"
+    echo -e "${YELLOW}⚠${NC} Story binary not found, using default: $STORY_BINARY"
+fi
+
+if [[ -z "$STORY_GETH_BINARY" ]]; then
+    STORY_GETH_BINARY="/usr/local/bin/story-geth"
+    echo -e "${YELLOW}⚠${NC} Story-Geth binary not found, using default: $STORY_GETH_BINARY"
+fi
+
+if [[ -z "$STORY_SERVICE" ]]; then
+    STORY_SERVICE="story"
+    echo -e "${YELLOW}⚠${NC} Story service not found, using default: $STORY_SERVICE"
+fi
+
+if [[ -z "$STORY_GETH_SERVICE" ]]; then
+    STORY_GETH_SERVICE="story-geth"
+    echo -e "${YELLOW}⚠${NC} Story-Geth service not found, using default: $STORY_GETH_SERVICE"
 fi
 
 # Detect RPC ports
+echo -e "${BLUE}[DEBUG]${NC} Detection phase complete, moving to RPC ports..."
 echo -e "${YELLOW}Detecting RPC ports...${NC}"
 STORY_RPC_PORT=""
 STORY_GETH_RPC_PORT=""
@@ -140,10 +248,20 @@ STORY_RPC_PORT="${STORY_RPC_PORT:-26657}"
 STORY_GETH_RPC_PORT="${STORY_GETH_RPC_PORT:-8545}"
 STORY_HOME="${STORY_HOME:-/root/.story}"
 
-echo -e "${GREEN}✓${NC} Configuration detected:"
+echo -e "${GREEN}✓${NC} Configuration detected/configured:"
+echo "  Story binary: $STORY_BINARY"
+echo "  Story service: $STORY_SERVICE" 
 echo "  Story RPC: http://localhost:$STORY_RPC_PORT"
+echo "  Story-Geth binary: $STORY_GETH_BINARY"
+echo "  Story-Geth service: $STORY_GETH_SERVICE"
 echo "  Story-Geth RPC: http://localhost:$STORY_GETH_RPC_PORT"
 echo "  Story Home: $STORY_HOME"
+echo
+echo -e "${BLUE}Note: If your configuration differs, you can edit /etc/story-sentinel/.env after installation.${NC}"
+echo
+
+# Add debug checkpoint
+echo -e "${BLUE}[DEBUG]${NC} Configuration detection complete, proceeding to installation..."
 
 # Create installation directory
 echo -e "${YELLOW}Creating installation directories...${NC}"
@@ -181,6 +299,9 @@ pip install --upgrade pip > /dev/null 2>&1
 pip install -r requirements.txt > /dev/null 2>&1
 pip install -e . > /dev/null 2>&1
 echo -e "${GREEN}✓${NC} Python environment ready"
+
+# Add debug checkpoint
+echo -e "${BLUE}[DEBUG]${NC} Python environment setup complete, generating configuration..."
 
 # Generate configuration file
 echo -e "${YELLOW}Generating configuration...${NC}"
