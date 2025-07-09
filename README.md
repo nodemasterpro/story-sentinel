@@ -33,7 +33,7 @@ Story Sentinel monitors both components of a Story Protocol node:
 ### One-Command Installation
 
 ```bash
-# Download and run quick installation
+# Download and run quick installation (requires root/sudo)
 curl -sSL https://raw.githubusercontent.com/nodemasterpro/story-sentinel/main/quick-start.sh | sudo bash
 ```
 
@@ -140,13 +140,16 @@ sudo systemctl start|stop|restart|status story-sentinel
 # View logs in real-time
 sudo journalctl -u story-sentinel -f
 
+# View API logs
+sudo journalctl -u story-sentinel-api -f
+
 # Reload configuration
 sudo systemctl reload story-sentinel
 ```
 
 ### API Endpoints
 
-The monitoring API is available on `http://localhost:8080`:
+The monitoring API is available on `http://localhost:8080` (via `story-sentinel-api` service):
 
 ```bash
 # General health
@@ -298,11 +301,15 @@ API_PORT=8080            # API port
 
 1. **Service won't start**:
 ```bash
-# Check logs
+# Check logs for both services
 sudo journalctl -u story-sentinel -f
+sudo journalctl -u story-sentinel-api -f
 
 # Verify configuration
 story-sentinel status
+
+# Fix timestamp parsing errors
+sudo bash repair-server.sh
 ```
 
 2. **Auto-detection failed**:
@@ -362,10 +369,36 @@ curl http://localhost:8080/health
 
 ## Uninstall
 
+### Complete Uninstallation
+
+Use our uninstall script for a complete and clean removal:
+
 ```bash
-# Stop and disable service
-sudo systemctl stop story-sentinel
-sudo systemctl disable story-sentinel
+# Download and run uninstall script
+curl -sSL https://raw.githubusercontent.com/nodemasterpro/story-sentinel/main/uninstall.sh | sudo bash
+```
+
+Or if you have the repository cloned:
+
+```bash
+sudo bash uninstall.sh
+```
+
+The uninstaller will:
+- ✅ Stop and disable all Story Sentinel services
+- ✅ Remove application files from `/opt/story-sentinel`
+- ✅ Optionally preserve configuration, backups, and logs
+- ✅ Clean up systemd services and CLI wrapper
+- ✅ **NOT affect your Story or Story-Geth nodes**
+
+### Manual Uninstallation
+
+If you prefer to uninstall manually:
+
+```bash
+# Stop and disable services
+sudo systemctl stop story-sentinel story-sentinel-api
+sudo systemctl disable story-sentinel story-sentinel-api
 
 # Remove files
 sudo rm -rf /opt/story-sentinel
@@ -373,6 +406,7 @@ sudo rm -rf /etc/story-sentinel
 sudo rm -rf /var/lib/story-sentinel
 sudo rm -rf /var/log/story-sentinel
 sudo rm /etc/systemd/system/story-sentinel.service
+sudo rm /etc/systemd/system/story-sentinel-api.service
 sudo rm /usr/local/bin/story-sentinel
 
 # Reload systemd

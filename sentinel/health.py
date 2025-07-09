@@ -248,18 +248,29 @@ class HealthChecker:
         # Check block production rate
         block_time_healthy = True
         if checks['latest_block_time'] and service_name in self.last_block_times:
-            last_time = self.last_block_times[service_name]
-            current_time = datetime.fromisoformat(checks['latest_block_time'].replace('Z', '+00:00'))
-            time_diff = (current_time - last_time).total_seconds()
-            
-            if time_diff > self.config.thresholds.block_time_variance:
-                block_time_healthy = False
+            try:
+                # Clean up timestamp string (remove any trailing characters like '>')
+                timestamp_str = checks['latest_block_time'].strip().rstrip('>')
+                last_time = self.last_block_times[service_name]
+                current_time = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                time_diff = (current_time - last_time).total_seconds()
+                
+                if time_diff > self.config.thresholds.block_time_variance:
+                    block_time_healthy = False
+            except ValueError as e:
+                logger.error(f"Failed to parse timestamp '{checks['latest_block_time']}': {e}")
+                block_time_healthy = True  # Don't fail health check on parse error
                 
         # Update last block time
         if checks['latest_block_time']:
-            self.last_block_times[service_name] = datetime.fromisoformat(
-                checks['latest_block_time'].replace('Z', '+00:00')
-            )
+            try:
+                # Clean up timestamp string
+                timestamp_str = checks['latest_block_time'].strip().rstrip('>')
+                self.last_block_times[service_name] = datetime.fromisoformat(
+                    timestamp_str.replace('Z', '+00:00')
+                )
+            except ValueError as e:
+                logger.error(f"Failed to parse timestamp for update '{checks['latest_block_time']}': {e}")
             
         # Determine overall health
         healthy = (
