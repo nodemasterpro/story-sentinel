@@ -272,21 +272,32 @@ echo -e "${GREEN}✓${NC} Directories created"
 
 # Install Python application
 echo -e "${YELLOW}Installing Story Sentinel application...${NC}"
-cd "$INSTALL_DIR"
 
-# Copy source files (assuming we're running from the source directory)
-if [[ -f "$(dirname "$0")/sentinel/__init__.py" ]]; then
-    cp -r "$(dirname "$0")"/sentinel .
-    cp "$(dirname "$0")/setup.py" .
-    cp "$(dirname "$0")/requirements.txt" .
+# Save current directory
+SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Check if we're in the source directory
+if [[ -f "$SOURCE_DIR/sentinel/__init__.py" ]]; then
+    echo "Installing from source directory: $SOURCE_DIR"
+    cd "$INSTALL_DIR"
+    cp -r "$SOURCE_DIR/sentinel" .
+    cp "$SOURCE_DIR/setup.py" .
+    cp "$SOURCE_DIR/requirements.txt" .
+    if [[ -d "$SOURCE_DIR/scripts" ]]; then
+        cp -r "$SOURCE_DIR/scripts" .
+    fi
     echo -e "${GREEN}✓${NC} Source files copied"
 else
     # Download from GitHub if not running from source
     echo -e "${YELLOW}Downloading from GitHub...${NC}"
+    cd "$INSTALL_DIR"
     git clone https://github.com/nodemasterpro/story-sentinel.git temp_download
     cp -r temp_download/sentinel .
     cp temp_download/setup.py .
     cp temp_download/requirements.txt .
+    if [[ -d "temp_download/scripts" ]]; then
+        cp -r temp_download/scripts .
+    fi
     rm -rf temp_download
     echo -e "${GREEN}✓${NC} Source downloaded from GitHub"
 fi
@@ -394,7 +405,7 @@ WorkingDirectory=$INSTALL_DIR
 Environment=PATH=$INSTALL_DIR/venv/bin:/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONPATH=$INSTALL_DIR
 EnvironmentFile=$CONFIG_DIR/.env
-ExecStart=$INSTALL_DIR/venv/bin/python -m sentinel monitor --config $CONFIG_DIR/config.yaml
+ExecStart=$INSTALL_DIR/venv/bin/python -m sentinel monitor
 ExecReload=/bin/kill -HUP \$MAINPID
 Restart=always
 RestartSec=10
@@ -426,7 +437,8 @@ cat > "/usr/local/bin/story-sentinel" <<EOF
 
 cd "$INSTALL_DIR"
 source venv/bin/activate
-exec python -m sentinel "\$@" --config "$CONFIG_DIR/config.yaml"
+export STORY_SENTINEL_CONFIG="$CONFIG_DIR/config.yaml"
+exec python -m sentinel "\$@"
 EOF
 
 chmod +x "/usr/local/bin/story-sentinel"

@@ -44,8 +44,22 @@ class Config:
     DEFAULT_ENV_PATH = Path.home() / ".story-sentinel" / ".env"
     
     def __init__(self, config_path: Optional[Path] = None, env_path: Optional[Path] = None):
-        self.config_path = config_path or self.DEFAULT_CONFIG_PATH
-        self.env_path = env_path or self.DEFAULT_ENV_PATH
+        # Check for system-wide installation paths first
+        if config_path is None:
+            if Path("/etc/story-sentinel/config.yaml").exists():
+                self.config_path = Path("/etc/story-sentinel/config.yaml")
+            else:
+                self.config_path = self.DEFAULT_CONFIG_PATH
+        else:
+            self.config_path = config_path
+            
+        if env_path is None:
+            if Path("/etc/story-sentinel/.env").exists():
+                self.env_path = Path("/etc/story-sentinel/.env")
+            else:
+                self.env_path = self.DEFAULT_ENV_PATH
+        else:
+            self.env_path = env_path
         
         # Load environment variables
         if self.env_path.exists():
