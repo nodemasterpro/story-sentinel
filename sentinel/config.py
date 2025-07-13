@@ -120,6 +120,21 @@ class Config:
         if self.config_path.exists():
             self.load_yaml_config()
             
+    @property
+    def discord_webhook(self) -> Optional[str]:
+        """Get Discord webhook URL."""
+        return self.notifications.discord_webhook
+        
+    @property
+    def telegram_bot_token(self) -> Optional[str]:
+        """Get Telegram bot token."""
+        return self.notifications.telegram_bot_token
+        
+    @property
+    def telegram_chat_id(self) -> Optional[str]:
+        """Get Telegram chat ID."""
+        return self.notifications.telegram_chat_id
+            
     def load_yaml_config(self):
         """Load configuration from YAML file."""
         try:
@@ -215,23 +230,40 @@ class Config:
         
         # Get Story version
         try:
-            result = os.popen(f"{self.story.binary_path} version 2>/dev/null").read().strip()
-            self.story.current_version = result
-            versions['story'] = result
+            # Story writes version info to stderr, so we need to redirect stderr to stdout
+            result = os.popen(f"{self.story.binary_path} version 2>&1").read().strip()
+            # Parse the multi-line output to extract just the version
+            for line in result.split('\n'):
+                if line.startswith('Version'):
+                    # Extract version from "Version       v1.3.0-stable" format
+                    version = line.split()[1] if len(line.split()) > 1 else result
+                    # Remove 'v' prefix for consistency
+                    version = version.lstrip('v')
+                    self.story.current_version = version
+                    versions['story'] = version
+                    break
+            else:
+                # Fallback if format is different
+                self.story.current_version = result
+                versions['story'] = result
         except Exception as e:
             logger.error(f"Failed to get Story version: {e}")
             versions['story'] = "unknown"
             
         # Get Story-Geth version
         try:
-            result = os.popen(f"{self.story_geth.binary_path} version 2>/dev/null").read().strip()
+            # Story-Geth also writes to stderr, so redirect to stdout
+            result = os.popen(f"{self.story_geth.binary_path} version 2>&1").read().strip()
             # Parse geth version output
             if "Version:" in result:
                 version_line = [l for l in result.split('\n') if 'Version:' in l][0]
-                self.story_geth.current_version = version_line.split('Version:')[1].strip()
+                version = version_line.split('Version:')[1].strip()
+                # Remove '-stable' suffix for consistency but keep the full version
+                self.story_geth.current_version = version
+                versions['story_geth'] = version
             else:
                 self.story_geth.current_version = result
-            versions['story_geth'] = self.story_geth.current_version
+                versions['story_geth'] = result
         except Exception as e:
             logger.error(f"Failed to get Story-Geth version: {e}")
             versions['story_geth'] = "unknown"

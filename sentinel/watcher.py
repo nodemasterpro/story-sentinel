@@ -74,20 +74,29 @@ class VersionWatcher:
         # Get current versions
         current_versions = self.config.get_current_versions()
         
-        # Check Story
-        latest_story = self._get_latest_release(self.config.story.github_repo)
-        if latest_story and current_versions.get('story') != latest_story.version:
-            updates['story'] = latest_story
+        # Check Story (include prereleases)
+        latest_story = self._get_latest_release(self.config.story.github_repo, include_prereleases=True)
+        if latest_story:
+            current_story = current_versions.get('story', '').replace('-stable', '')
+            if current_story != latest_story.version:
+                updates['story'] = latest_story
             
         # Check Story Geth
-        latest_geth = self._get_latest_release(self.config.story_geth.github_repo)
-        if latest_geth and current_versions.get('story_geth') != latest_geth.version:
-            updates['story_geth'] = latest_geth
+        latest_geth = self._get_latest_release(self.config.story_geth.github_repo, include_prereleases=True)
+        if latest_geth:
+            current_geth = current_versions.get('story_geth', '').replace('-stable', '')
+            if current_geth != latest_geth.version:
+                updates['story_geth'] = latest_geth
             
         return updates
         
-    def _get_latest_release(self, repo: str) -> Optional[Version]:
-        """Get latest release from GitHub."""
+    def _get_latest_release(self, repo: str, include_prereleases: bool = True) -> Optional[Version]:
+        """Get latest release from GitHub.
+        
+        Args:
+            repo: GitHub repository in format 'owner/repo'
+            include_prereleases: Whether to include pre-releases in the check
+        """
         # Check rate limiting
         if repo in self.last_github_check:
             elapsed = time.time() - self.last_github_check[repo]
@@ -95,45 +104,64 @@ class VersionWatcher:
                 time.sleep(self.RATE_LIMIT_DELAY - elapsed)
                 
         # Check cache
-        if repo in self.cached_versions:
-            cached_version, cached_time = self.cached_versions[repo]
+        cache_key = f"{repo}:{include_prereleases}"
+        if cache_key in self.cached_versions:
+            cached_version, cached_time = self.cached_versions[cache_key]
             if datetime.now() - cached_time < timedelta(minutes=5):
                 return cached_version
                 
         try:
-            # Get latest release
+            # First try /releases/latest for stable releases
             url = f"{self.GITHUB_API_BASE}/repos/{repo}/releases/latest"
             response = self.session.get(url, timeout=5)
             self.last_github_check[repo] = time.time()
             
+            latest_version = None
+            
             if response.status_code == 200:
                 data = response.json()
-                
                 # Parse release info
-                version = Version(
+                latest_version = Version(
                     tag=data['tag_name'],
                     version=data['tag_name'].lstrip('v'),
                     published_at=datetime.fromisoformat(data['published_at'].replace('Z', '+00:00')),
                     release_notes=data.get('body', '')
                 )
                 
-                # Find download URL for Linux binary
-                for asset in data.get('assets', []):
-                    name = asset['name'].lower()
-                    if 'linux' in name and ('amd64' in name or 'x86_64' in name):
-                        version.download_url = asset['browser_download_url']
-                        break
+            # If we should include prereleases, check all releases
+            if include_prereleases:
+                url = f"{self.GITHUB_API_BASE}/repos/{repo}/releases"
+                response = self.session.get(url, params={'per_page': 10}, timeout=5)
+                
+                if response.status_code == 200:
+                    releases = response.json()
+                    for data in releases:
+                        # Create Version object
+                        version = Version(
+                            tag=data['tag_name'],
+                            version=data['tag_name'].lstrip('v'),
+                            published_at=datetime.fromisoformat(data['published_at'].replace('Z', '+00:00')),
+                            release_notes=data.get('body', '')
+                        )
                         
+                        # Compare with current latest
+                        if latest_version is None or version > latest_version:
+                            latest_version = version
+                            
+                            # Find download URL for Linux binary
+                            for asset in data.get('assets', []):
+                                name = asset['name'].lower()
+                                if 'linux' in name and ('amd64' in name or 'x86_64' in name):
+                                    latest_version.download_url = asset['browser_download_url']
+                                    break
+            
+            if latest_version:
                 # Cache the result
-                self.cached_versions[repo] = (version, datetime.now())
-                
-                logger.info(f"Found latest version for {repo}: {version.version}")
-                return version
-                
-            elif response.status_code == 404:
-                logger.warning(f"Repository {repo} not found")
+                self.cached_versions[cache_key] = (latest_version, datetime.now())
+                logger.info(f"Found latest version for {repo}: {latest_version.version} (prerelease={include_prereleases})")
+                return latest_version
             else:
-                logger.error(f"GitHub API error for {repo}: {response.status_code}")
+                logger.warning(f"No releases found for {repo}")
                 
         except requests.exceptions.Timeout:
             logger.error(f"Timeout checking {repo}")

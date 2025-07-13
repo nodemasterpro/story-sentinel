@@ -240,8 +240,21 @@ class UpgradeScheduler:
                 if upgrade.status in ['pending', 'approved']:
                     event = Event()
                     event.add('summary', f'Story Upgrade: {upgrade.component} to {upgrade.target_version}')
-                    event.add('dtstart', upgrade.scheduled_time)
-                    event.add('dtend', upgrade.scheduled_time + upgrade.estimated_duration)
+                    
+                    # Ensure dates have UTC timezone for Outlook compatibility
+                    start_time = upgrade.scheduled_time
+                    if start_time.tzinfo is None:
+                        start_time = pytz.UTC.localize(start_time)
+                    
+                    end_time = start_time + upgrade.estimated_duration
+                    
+                    event.add('dtstart', start_time)
+                    event.add('dtend', end_time)
+                    
+                    # Add required UID for Outlook compatibility
+                    import uuid
+                    event.add('uid', f'{upgrade.component}-{upgrade.target_version}-{start_time.strftime("%Y%m%dT%H%M%S")}-{uuid.uuid4().hex[:8]}@story-sentinel')
+                    
                     event.add('description', f'''Component: {upgrade.component}
 Current Version: {upgrade.current_version}
 Target Version: {upgrade.target_version}

@@ -17,6 +17,7 @@ from .health import HealthChecker
 from .watcher import VersionWatcher
 from .runner import UpgradeRunner
 from .scheduler import UpgradeScheduler
+from .notifications import NotificationManager
 
 # Setup logging
 def setup_logging(log_level: str, log_file: Optional[Path] = None):
@@ -161,6 +162,18 @@ def upgrade(config: Config, component: str, version: str, dry_run: bool, force: 
     # Perform upgrade
     success, message = runner.perform_upgrade(component, target_version, dry_run=dry_run)
     
+    # Send notification if not dry run
+    if not dry_run:
+        notifications = NotificationManager(
+            discord_webhook=config.discord_webhook,
+            telegram_bot_token=config.telegram_bot_token,
+            telegram_chat_id=config.telegram_chat_id
+        )
+        
+        current_versions = config.get_current_versions()
+        from_version = current_versions.get(component, "unknown")
+        notifications.send_upgrade_notification(component, from_version, version, success)
+    
     if success:
         click.echo(f"✅ {message}")
     else:
@@ -217,6 +230,18 @@ def schedule_upgrade(config: Config, component: str, version: str, time: Optiona
     # Schedule upgrade
     upgrade = scheduler.schedule_upgrade(component, target_version, scheduled_time, auto_approve)
     
+    # Send notification
+    notifications = NotificationManager(
+        discord_webhook=config.discord_webhook,
+        telegram_bot_token=config.telegram_bot_token,
+        telegram_chat_id=config.telegram_chat_id
+    )
+    notifications.send_upgrade_scheduled(
+        component, 
+        target_version.version, 
+        upgrade.scheduled_time.strftime('%Y-%m-%d %H:%M UTC')
+    )
+    
     click.echo(f"✅ Scheduled {component} upgrade to {target_version.version}")
     click.echo(f"   Time: {upgrade.scheduled_time.strftime('%Y-%m-%d %H:%M UTC')}")
     click.echo(f"   Status: {upgrade.status}")
@@ -231,11 +256,29 @@ def monitor(config: Config, interval: int, once: bool):
     watcher = VersionWatcher(config)
     scheduler = UpgradeScheduler(config)
     runner = UpgradeRunner(config)
+    notifications = NotificationManager(
+        discord_webhook=config.discord_webhook,
+        telegram_bot_token=config.telegram_bot_token,
+        telegram_chat_id=config.telegram_chat_id
+    )
     
     async def monitoring_loop():
         """Main monitoring loop."""
+        # Get initial status and updates for startup notification
+        initial_health = health_checker.check_all()
+        initial_updates = watcher.check_for_updates()
+        
+        # Send enhanced startup notification
+        notifications.send_startup_notification(initial_health, initial_updates)
+        
+        # Track already notified updates to avoid spam
+        notified_updates = set()
+        loop_count = 0
+        
         while True:
             try:
+                loop_count += 1
+                
                 # Check health
                 health_status = health_checker.check_all()
                 
@@ -250,9 +293,28 @@ def monitor(config: Config, interval: int, once: bool):
                     for component, version in updates.items():
                         logging.info(f"Update available for {component}: {version.version}")
                         
+                        # Send notification for new updates (avoid spam)
+                        update_key = f"{component}-{version.version}"
+                        if update_key not in notified_updates:
+                            current_versions = config.get_current_versions()
+                            current_version = current_versions.get(component, "unknown")
+                            
+                            notifications.send_update_detected(
+                                component, 
+                                current_version, 
+                                version.version,
+                                version.published_at.strftime('%Y-%m-%d')
+                            )
+                            notified_updates.add(update_key)
+                        
                         # Auto-schedule if configured
                         if config.mode == 'auto' and watcher.should_auto_upgrade(version):
-                            scheduler.schedule_upgrade(component, version, auto_approve=True)
+                            upgrade = scheduler.schedule_upgrade(component, version, auto_approve=True)
+                            notifications.send_upgrade_scheduled(
+                                component, 
+                                version.version, 
+                                upgrade.scheduled_time.strftime('%Y-%m-%d %H:%M UTC')
+                            )
                             
                 # Check scheduled upgrades
                 upcoming = scheduler.get_upcoming_upgrades(hours=1)
@@ -358,6 +420,69 @@ CHECK_INTERVAL=300
     click.echo(f"1. Copy {env_example_path} to {config.env_path}")
     click.echo(f"2. Edit {config.env_path} with your settings")
     click.echo(f"3. Run 'story-sentinel status' to check node health")
+
+@cli.command()
+@click.argument('index', type=int)
+@click.pass_obj
+def cancel_upgrade(config: Config, index: int):
+    """Cancel a scheduled upgrade by its index number."""
+    scheduler = UpgradeScheduler(config)
+    
+    # Show current schedule first
+    click.echo("Current scheduled upgrades:")
+    click.echo(scheduler.get_schedule_summary())
+    click.echo()
+    
+    # Validate index
+    if index < 1 or index > len(scheduler.scheduled_upgrades):
+        click.echo(f"❌ Invalid index. Please use a number between 1 and {len(scheduler.scheduled_upgrades)}", err=True)
+        return
+        
+    # Get upgrade info before cancelling
+    upgrade = scheduler.scheduled_upgrades[index - 1]
+    if upgrade.status == 'cancelled':
+        click.echo(f"❌ Upgrade {index} is already cancelled", err=True)
+        return
+        
+    if upgrade.status == 'completed':
+        click.echo(f"❌ Cannot cancel completed upgrade {index}", err=True)
+        return
+        
+    # Confirm cancellation
+    click.echo(f"About to cancel: {upgrade.component} → {upgrade.target_version}")
+    click.echo(f"Scheduled: {upgrade.scheduled_time.strftime('%Y-%m-%d %H:%M UTC')}")
+    
+    if not click.confirm("Do you want to cancel this upgrade?"):
+        click.echo("Cancellation aborted")
+        return
+        
+    # Cancel the upgrade
+    if scheduler.cancel_upgrade(index - 1):  # Convert to 0-based index
+        click.echo(f"✅ Successfully cancelled upgrade {index}")
+        scheduler.save_schedule()
+        scheduler.generate_ics_calendar()  # Regenerate calendar
+        click.echo("📅 Calendar updated")
+    else:
+        click.echo(f"❌ Failed to cancel upgrade {index}", err=True)
+
+@cli.command()
+@click.pass_obj
+def test_notifications(config: Config):
+    """Test notification system (Discord/Telegram)."""
+    notifications = NotificationManager(
+        discord_webhook=config.discord_webhook,
+        telegram_bot_token=config.telegram_bot_token,
+        telegram_chat_id=config.telegram_chat_id
+    )
+    
+    if not config.discord_webhook and not (config.telegram_bot_token and config.telegram_chat_id):
+        click.echo("❌ No notification channels configured", err=True)
+        click.echo("Configure DISCORD_WEBHOOK or TG_BOT_TOKEN+TG_CHAT_ID in .env file")
+        return
+        
+    click.echo("🧪 Sending test notifications...")
+    notifications.test_notifications()
+    click.echo("✅ Test notifications sent to configured channels")
 
 @cli.command()
 @click.pass_obj

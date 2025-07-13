@@ -118,17 +118,24 @@ story-sentinel status
 # Check for available updates
 story-sentinel check-updates
 
-# Perform manual upgrade
-story-sentinel upgrade story v1.2.1
+# Perform manual upgrade (version without 'v' prefix)
+story-sentinel upgrade story 1.2.1
+story-sentinel upgrade story_geth 1.1.1
 
 # View upgrade history
 story-sentinel history
 
 # Schedule an upgrade
-story-sentinel schedule-upgrade story v1.2.1 --time "2025-01-15 02:00"
+story-sentinel schedule-upgrade story 1.2.1 --time "2025-01-15 02:00"
 
 # View scheduled upgrades
 story-sentinel schedule
+
+# Cancel a scheduled upgrade (by index number)
+story-sentinel cancel-upgrade 1
+
+# Test notifications
+story-sentinel test-notifications
 ```
 
 ### Service Management
@@ -233,16 +240,33 @@ story-sentinel rollback story backup_20241201_120000
 3. Get your chat ID: Message [@userinfobot](https://t.me/userinfobot)
 4. Configure in `/etc/story-sentinel/.env`
 
+### Testing Notifications
+
+After configuring Discord/Telegram, test your setup:
+
+```bash
+# Test both Discord and Telegram notifications
+story-sentinel test-notifications
+```
+
+This will send a test message to verify your configuration is working correctly.
+
 ## Calendar Integration
 
 Story Sentinel generates iCS calendar files compatible with:
 
 - **Google Calendar**: Add by URL
-- **Outlook**: Subscribe to calendar
+- **Outlook**: Subscribe to calendar (full compatibility with UID and UTC timestamps)
 - **Apple Calendar**: Calendar subscription
+- **Any RFC 5545 compliant calendar application**
+
+### Calendar File Locations
 
 ```bash
-# Calendar URL
+# Local calendar file
+/var/log/story-sentinel/upgrade_calendar.ics
+
+# HTTP endpoint
 http://your-server:8080/next-upgrade.ics
 
 # Download calendar file

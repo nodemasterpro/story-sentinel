@@ -17,19 +17,23 @@ NC='\033[0m'
 
 # Logging function
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >&2
 }
 
 log_error() {
-    echo -e "${RED}[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1${NC}" | tee -a "$LOG_FILE"
+    echo -e "${RED}[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1${NC}" >> "$LOG_FILE"
+    echo -e "${RED}[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1${NC}" >&2
 }
 
 log_success() {
-    echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')] SUCCESS: $1${NC}" | tee -a "$LOG_FILE"
+    echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')] SUCCESS: $1${NC}" >> "$LOG_FILE"
+    echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')] SUCCESS: $1${NC}" >&2
 }
 
 log_warning() {
-    echo -e "${YELLOW}[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: $1${NC}" | tee -a "$LOG_FILE"
+    echo -e "${YELLOW}[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: $1${NC}" >> "$LOG_FILE"
+    echo -e "${YELLOW}[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: $1${NC}" >&2
 }
 
 # Help function
@@ -130,11 +134,11 @@ download_binary() {
     
     case "$service" in
         "story")
-            local url="https://github.com/piplabs/story/releases/download/${version}/story-linux-amd64"
+            local url="https://github.com/piplabs/story/releases/download/v${version}/story-linux-amd64"
             local binary_name="story"
             ;;
         "story_geth")
-            local url="https://github.com/piplabs/story-geth/releases/download/${version}/geth-linux-amd64"
+            local url="https://github.com/piplabs/story-geth/releases/download/v${version}/geth-linux-amd64"
             local binary_name="geth"
             ;;
         *)
